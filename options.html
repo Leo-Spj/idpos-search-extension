@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>ID POS Navigator - Opciones</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f6f8;
+      color: #1f2430;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    p {
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      text-transform: uppercase;
+      background: #f8fafc;
+    }
+    input:focus {
+      outline: 2px solid #2563eb;
+      background: #ffffff;
+    }
+    .actions {
+      margin-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      color: #475569;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ID POS Navigator</h1>
+    <p>Define la combinación de teclas que activará la barra flotante directamente en la página. Recuerda que también puedes ajustar el atajo del navegador desde <strong>chrome://extensions/shortcuts</strong>.</p>
+    <label for="shortcutInput">Captura de atajo personalizado</label>
+    <input id="shortcutInput" type="text" value="" readonly aria-label="Atajo personalizado" />
+    <div class="actions">
+      <span id="statusLabel">Selecciona el campo y presiona un atajo.</span>
+      <button id="resetButton" type="button">Restablecer</button>
+    </div>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

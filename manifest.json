@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "ID POS Navigator",
+  "description": "Floating command bar to accelerate navigation within ID POS.",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["https://pos.idbi.pe/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "commands": {
+    "toggle-command-bar": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Toggle the ID POS command bar"
+    }
+  },
+  "action": {
+    "default_title": "ID POS Navigator"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://pos.idbi.pe/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
