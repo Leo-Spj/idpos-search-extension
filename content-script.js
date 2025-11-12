@@ -6,6 +6,15 @@
   const STORAGE_SHORTCUT_KEY = "customShortcut";
   const STATIC_DATA_URL = chrome.runtime.getURL("data/navigation_tree.json");
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
+  const STRIP_DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+
+  function stripDiacritics(value) {
+    return value ? value.normalize("NFD").replace(STRIP_DIACRITICS_REGEX, "") : "";
+  }
+
+  function buildSearchTokens(query) {
+    return stripDiacritics(query.toLowerCase()).split(/\s+/).filter(Boolean);
+  }
 
   const state = {
     open: false,
@@ -380,8 +389,7 @@
   }
 
   function rankResults(query, nodes) {
-    const sanitized = query.toLowerCase();
-    const tokens = sanitized.split(/\s+/).filter(Boolean);
+  const tokens = buildSearchTokens(query);
     if (!tokens.length) return getDefaultResults();
 
     const scored = [];
@@ -395,17 +403,17 @@
   }
 
   function scoreNode(tokens, node) {
-    const title = node.titleLower;
-    const path = node.pathLower;
+  const title = node.titleSearch || node.titleLower || "";
+  const path = node.pathSearch || node.pathLower || "";
     let score = 0;
 
     for (const token of tokens) {
       if (!token) continue;
-      if (title === token) score += 120;
-      else if (title.startsWith(token)) score += 90;
-      else if (title.includes(token)) score += 60;
-      else if (path.includes(token)) score += 40;
-      else if (fuzzyIncludes(title, token)) score += 25;
+  if (title === token) score += 120;
+  else if (title.startsWith(token)) score += 90;
+  else if (title.includes(token)) score += 60;
+  else if (path.includes(token)) score += 40;
+  else if (fuzzyIncludes(title, token)) score += 25;
       else return 0;
     }
 
@@ -447,13 +455,20 @@
     const path = Array.isArray(raw.path) ? raw.path : buildPath(raw.pathLabel);
     const depth = path.length ? path.length - 1 : 0;
     const title = raw.title || (path.length ? path[path.length - 1] : "");
+    const titleLower = title.toLowerCase();
+    const pathJoined = path.join(" ");
+    const pathLower = pathJoined.toLowerCase();
+    const titleSearch = stripDiacritics(titleLower);
+    const pathSearch = stripDiacritics(pathLower);
     return {
       id,
       title,
-      titleLower: title.toLowerCase(),
+      titleLower,
+      titleSearch,
       path,
-  pathLower: path.join(" ").toLowerCase(),
+      pathLower,
   pathLabel: raw.pathLabel || path.join(" > "),
+      pathSearch,
       url: absoluteUrl(raw.url),
       description: raw.description || "",
       depth,
@@ -518,8 +533,11 @@
   }
 
   function elementToNode(element) {
-    const text = getNodeText(element);
-    if (!text) return null;
+  const text = getNodeText(element);
+  if (!text) return null;
+
+  const titleLower = text.toLowerCase();
+  const titleSearch = stripDiacritics(titleLower);
 
     let url = null;
     if (element instanceof HTMLAnchorElement && element.href) {
@@ -533,14 +551,19 @@
     const description = element.getAttribute("aria-description") || element.getAttribute("aria-label") || element.getAttribute("title") || "";
     const path = deriveHierarchy(element, text);
     const idBase = url || path.join("::") || text;
+    const pathJoined = path.join(" ");
+    const pathLower = pathJoined.toLowerCase();
+    const pathSearch = stripDiacritics(pathLower);
 
     return {
       id: `dom:${idBase}`,
       title: text,
-      titleLower: text.toLowerCase(),
+      titleLower,
+      titleSearch,
       path,
-  pathLower: path.join(" ").toLowerCase(),
+      pathLower,
   pathLabel: path.join(" > "),
+      pathSearch,
       url,
       description,
       depth: path.length ? path.length - 1 : 0,
