@@ -28,5 +28,11 @@
       "js": ["content-script.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["data/navigation_tree.json"],
+      "matches": ["https://pos.idbi.pe/*"]
+    }
   ]
 }
