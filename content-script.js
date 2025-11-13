@@ -114,6 +114,13 @@
         gap: 8px;
         margin-bottom: 4px;
       }
+      .result-title-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+      }
       .module-badge {
         display: inline-block;
         padding: 2px 8px;
@@ -123,6 +130,7 @@
         text-transform: uppercase;
         letter-spacing: 0.3px;
         white-space: nowrap;
+        flex-shrink: 0;
       }
       .module-badge.ventas {
         background: rgba(59, 130, 246, 0.25);
@@ -179,6 +187,28 @@
         font-weight: 600;
         color: #ffffff;
         flex: 1;
+        min-width: 0;
+      }
+      .result-path-tags {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+        margin-left: auto;
+      }
+      .path-tag {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .path-separator {
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.3);
+        margin: 0 -2px;
       }
       .result-description {
         font-size: 12px;
@@ -580,6 +610,10 @@
         header.appendChild(badge);
       }
 
+      // Wrapper para título y etiquetas de path
+      const titleWrapper = document.createElement("div");
+      titleWrapper.className = "result-title-wrapper";
+
       const titleSpan = document.createElement("div");
       titleSpan.className = "result-title";
       
@@ -593,8 +627,34 @@
         titleSpan.textContent = item.title;
       }
       
-      header.appendChild(titleSpan);
+      titleWrapper.appendChild(titleSpan);
 
+      // Agregar etiquetas de path en el lado derecho
+      if (item.path && item.path.length > 1) {
+        const pathTags = document.createElement("div");
+        pathTags.className = "result-path-tags";
+        
+        // Mostrar el path completo excepto el último elemento (que suele ser el título)
+        const pathToShow = item.path.slice(0, -1);
+        
+        pathToShow.forEach((pathPart, idx) => {
+          if (idx > 0) {
+            const separator = document.createElement("span");
+            separator.className = "path-separator";
+            separator.textContent = "›";
+            pathTags.appendChild(separator);
+          }
+          
+          const tag = document.createElement("span");
+          tag.className = "path-tag";
+          tag.textContent = pathPart;
+          pathTags.appendChild(tag);
+        });
+        
+        titleWrapper.appendChild(pathTags);
+      }
+
+      header.appendChild(titleWrapper);
       li.appendChild(header);
 
       if (item.description) {
@@ -689,6 +749,7 @@
       action: node.action,
       nodeRef: node.ref,
       pathLabel: hierarchy,
+      path: node.path || [],
       module: node.module || "",
       usage: node.usage || 0
     };
