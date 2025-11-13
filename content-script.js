@@ -17,6 +17,7 @@
     container: null,
   footerBadge: null,
   emptyState: null,
+    shiftIndicator: null,
     results: [],
     nodes: [],
     staticNodes: [],
@@ -27,7 +28,8 @@
     initialized: false,
     shortcut: null,
     loadingStatic: false,
-    scanning: false
+    scanning: false,
+    shiftPressed: false
   };
 
   const templateHtml = `
@@ -200,8 +202,41 @@
         font-size: 13px;
         color: rgba(255, 255, 255, 0.56);
       }
+      .shift-indicator {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(59, 130, 246, 0.9);
+        color: #ffffff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        animation: slideIn 0.2s ease;
+      }
+      .shift-indicator.active {
+        display: flex;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
     </style>
     <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar">
+      <div class="shift-indicator" id="shift-indicator">
+        <span>⇧</span>
+        <span>Abrir en nueva pestaña</span>
+      </div>
       <input class="command-input" type="text" placeholder="Buscar módulos, rutas o acciones" autocomplete="off" spellcheck="false" aria-label="Buscar" />
       <ul class="results" role="listbox"></ul>
       <div class="empty-state" hidden>No se encontraron coincidencias.</div>
@@ -250,6 +285,7 @@
     const list = shadow.querySelector(".results");
     const empty = shadow.querySelector(".empty-state");
     const footerHint = shadow.querySelector("#usage-hint");
+    const shiftIndicator = shadow.querySelector("#shift-indicator");
 
     state.host = host;
     state.shadow = shadow;
@@ -258,10 +294,15 @@
     state.list = list;
     state.emptyState = empty;
     state.footerBadge = footerHint;
+    state.shiftIndicator = shiftIndicator;
 
     input.addEventListener("input", handleQueryInput);
     input.addEventListener("keydown", handleInputKeys);
     list.addEventListener("click", onResultClick);
+    
+    // Listeners para detectar Shift
+    overlay.addEventListener("keydown", handleShiftDown);
+    overlay.addEventListener("keyup", handleShiftUp);
   }
 
   function toggleOverlay() {
@@ -284,8 +325,10 @@
   function closeOverlay() {
     if (!state.container || !state.open) return;
     state.open = false;
+    state.shiftPressed = false;
     state.container.classList.remove("open");
     if (state.input) state.input.blur();
+    updateShiftIndicator();
   }
 
   function handleQueryInput(event) {
@@ -320,7 +363,7 @@
         break;
       case "Enter":
         event.preventDefault();
-        activateSelected();
+        activateSelected(event.shiftKey);
         break;
       case "Escape":
         event.preventDefault();
@@ -340,20 +383,69 @@
     const index = Number(target.dataset.index);
     if (Number.isNaN(index)) return;
     state.selectedIndex = index;
-    activateSelected();
+    activateSelected(event.shiftKey);
   }
 
-  function activateSelected() {
+  function activateSelected(openInNewTab = false) {
     const selection = state.results[state.selectedIndex];
     if (!selection) return;
     incrementUsage(selection);
     closeOverlay();
+    
     if (selection.action === "click" && selection.nodeRef) {
       selection.nodeRef.click();
       return;
     }
+    
     if (!selection.url) return;
-    window.location.assign(selection.url);
+    
+    // Abrir en nueva pestaña si Shift está presionado
+    if (openInNewTab || state.shiftPressed) {
+      // Crear un enlace temporal y simular un clic con ctrl para asegurar que se abra en pestaña
+      const link = document.createElement("a");
+      link.href = selection.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      
+      // Simular clic con Ctrl/Cmd para forzar apertura en nueva pestaña
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        ctrlKey: true,
+        metaKey: navigator.platform.includes("Mac")
+      });
+      
+      link.dispatchEvent(clickEvent);
+      document.body.removeChild(link);
+    } else {
+      window.location.assign(selection.url);
+    }
+  }
+
+  function handleShiftDown(event) {
+    if (event.key === "Shift" && !state.shiftPressed) {
+      state.shiftPressed = true;
+      updateShiftIndicator();
+    }
+  }
+
+  function handleShiftUp(event) {
+    if (event.key === "Shift" && state.shiftPressed) {
+      state.shiftPressed = false;
+      updateShiftIndicator();
+    }
+  }
+
+  function updateShiftIndicator() {
+    if (!state.shiftIndicator) return;
+    if (state.shiftPressed) {
+      state.shiftIndicator.classList.add("active");
+    } else {
+      state.shiftIndicator.classList.remove("active");
+    }
   }
 
   function renderResults(results) {
@@ -452,7 +544,7 @@
   }
 
   function rankResults(query, nodes) {
-    const sanitized = query.toLowerCase();
+    const sanitized = removeAccents(query.toLowerCase());
     const tokens = sanitized.split(/\s+/).filter(Boolean);
     if (!tokens.length) return getDefaultResults();
 
@@ -500,6 +592,10 @@
     return false;
   }
 
+  function removeAccents(text) {
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
   async function loadStaticNavigation() {
     state.loadingStatic = true;
     try {
@@ -523,9 +619,9 @@
     return {
       id,
       title,
-      titleLower: title.toLowerCase(),
+      titleLower: removeAccents(title.toLowerCase()),
       path,
-      pathLower: path.join(" ").toLowerCase(),
+      pathLower: removeAccents(path.join(" ").toLowerCase()),
       pathLabel: raw.pathLabel || path.join(" > "),
       url: absoluteUrl(raw.url),
       description: raw.description || "",
@@ -632,9 +728,9 @@
     return {
       id: `dom:${idBase}`,
       title: text,
-      titleLower: text.toLowerCase(),
+      titleLower: removeAccents(text.toLowerCase()),
       path,
-      pathLower: path.join(" ").toLowerCase(),
+      pathLower: removeAccents(path.join(" ").toLowerCase()),
       pathLabel: path.join(" > "),
       url,
       description,
