@@ -73,11 +73,6 @@
   {"id":"route:reports-organization-sales","module":"Sucursales","title":"Reporte de ventas por organización","url":"/reports/organization-sales","path":["Sucursales","Reporte de ventas por organización"],"description":"Ventas por organización"},
   {"id":"route:sales-upload-history","module":"Sucursales","title":"Historial de cargas de ventas","url":"/sales-upload-history","path":["Sucursales","Historial de cargas de ventas"],"description":"Historial de cargas de ventas"},
 
-  {"id":"route:auth","module":"Autenticación","title":"Autenticación","url":"/auth","path":["Autenticación","Portal"],"description":"Portal de autenticación de ID POS"},
-  {"id":"route:auth-login","module":"Autenticación","title":"Inicio de Sesión","url":"/auth/login","path":["Autenticación","Inicio de Sesión"],"description":"Acceso para usuarios registrados"},
-  {"id":"route:auth-recover","module":"Autenticación","title":"Recuperación de Contraseña","url":"/auth/recover","path":["Autenticación","Recuperación de Contraseña"],"description":"Solicitud de restablecimiento de credenciales"},
-  {"id":"route:auth-register","module":"Autenticación","title":"Registro de Nuevos Usuarios","url":"/auth/register","path":["Autenticación","Registro"],"description":"Alta de nuevos usuarios"},
-  
   {"id":"route:printer","module":"Configuraciones","title":"Mi impresora","url":"/printer","path":["Configuraciones","Dispositivos e Impresión","Mi impresora"],"description":"Configuración de impresora"},
   {"id":"route:venue","module":"Configuraciones","title":"Administrar local","url":"/venue","path":["Configuraciones","Configuración de Local","Administrar local"],"description":"Configuración general del local"},
   {"id":"route:members-v2","module":"Configuraciones","title":"Equipo","url":"/members-v2","path":["Configuraciones","Gestión de Equipo","Agregar","Equipo"],"description":"Gestión del equipo"},

@@ -5,6 +5,7 @@
   const STORAGE_USAGE_PREFIX = "usage:";
   const STORAGE_SHORTCUT_KEY = "customShortcut";
   const STATIC_DATA_URL = chrome.runtime.getURL("data/navigation_tree.json");
+  const DEPRECATED_CATEGORY_KEY = "deprecado";
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
 
   const state = {
@@ -387,7 +388,17 @@
 
       const titleSpan = document.createElement("div");
       titleSpan.className = "result-title";
-      titleSpan.textContent = item.title;
+      
+      // Si el título es igual al módulo, usar el pathLabel completo
+      const normalizedTitle = (item.title || "").trim().toLowerCase();
+      const normalizedModule = (item.module || "").trim().toLowerCase();
+      
+      if (normalizedTitle === normalizedModule && item.pathLabel) {
+        titleSpan.textContent = item.pathLabel;
+      } else {
+        titleSpan.textContent = item.title;
+      }
+      
       header.appendChild(titleSpan);
 
       li.appendChild(header);
@@ -421,12 +432,7 @@
   }
 
   function getDefaultResults() {
-    const nodes = state.nodes.slice().sort((a, b) => {
-      const usageDiff = (b.usage || 0) - (a.usage || 0);
-      if (usageDiff !== 0) return usageDiff;
-      if (a.depth !== b.depth) return a.depth - b.depth;
-      return a.title.localeCompare(b.title, "es", { sensitivity: "base" });
-    });
+    const nodes = state.nodes.slice().sort(compareByCategoryAndPath);
     return nodes.slice(0, MAX_RESULTS).map(mapNodeToResult);
   }
 
@@ -457,7 +463,8 @@
       scored.push({ score, node });
     }
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
+    const limited = scored.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
+    return limited.sort(compareByCategoryAndPath);
   }
 
   function scoreNode(tokens, node) {
@@ -693,11 +700,31 @@
   function mergeNodes(domNodes) {
     const usage = state.usageMap;
     const byId = new Map();
+    const byUrl = new Map();
     const combined = [...state.staticNodes, ...domNodes];
 
     for (const node of combined) {
       const existingUsage = usage.get(node.id) || 0;
       node.usage = existingUsage;
+      
+      // Deduplicar por URL si existe
+      if (node.url) {
+        const normalizedUrl = node.url.toLowerCase().trim();
+        const existing = byUrl.get(normalizedUrl);
+        
+        if (existing) {
+          // Si ya existe un nodo con la misma URL, priorizar el estático
+          if (existing.source === "static" && node.source === "dom") {
+            continue; // Saltar el nodo del DOM
+          } else if (node.source === "static" && existing.source === "dom") {
+            // Reemplazar el nodo del DOM con el estático
+            byId.delete(existing.id);
+          }
+        }
+        
+        byUrl.set(normalizedUrl, node);
+      }
+      
       byId.set(node.id, node);
     }
 
@@ -822,6 +849,31 @@
       case "ArrowRight": return "arrowright";
       default: return key.toLowerCase();
     }
+  }
+
+  function compareByCategoryAndPath(a, b) {
+    const categoryA = normalizeCategory(a.module);
+    const categoryB = normalizeCategory(b.module);
+
+    const deprecatedA = categoryA === DEPRECATED_CATEGORY_KEY;
+    const deprecatedB = categoryB === DEPRECATED_CATEGORY_KEY;
+    if (deprecatedA !== deprecatedB) return deprecatedA ? 1 : -1;
+
+    const categoryCompare = categoryA.localeCompare(categoryB, "es", { sensitivity: "base" });
+    if (categoryCompare !== 0) return categoryCompare;
+
+    const pathA = String((a.pathLabel || "").trim());
+    const pathB = String((b.pathLabel || "").trim());
+    const pathCompare = pathA.localeCompare(pathB, "es", { sensitivity: "base" });
+    if (pathCompare !== 0) return pathCompare;
+
+    const titleA = String((a.title || "").trim());
+    const titleB = String((b.title || "").trim());
+    return titleA.localeCompare(titleB, "es", { sensitivity: "base" });
+  }
+
+  function normalizeCategory(value) {
+    return (value || "").trim().toLowerCase();
   }
 
 })();
