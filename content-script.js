@@ -15,13 +15,21 @@
     input: null,
     list: null,
     container: null,
-  footerBadge: null,
-  emptyState: null,
+    footerBadge: null,
+    emptyState: null,
     shiftIndicator: null,
+    categoryFilter: null,
+    categoryName: null,
     results: [],
     nodes: [],
     staticNodes: [],
     usageMap: new Map(),
+    frequencyData: {
+      lastAccess: new Map(),
+      accessCount: new Map(),
+      timeOfDay: new Map(),
+      weekday: new Map()
+    },
     selectedIndex: 0,
     lastScan: 0,
     mutationTimer: null,
@@ -29,7 +37,8 @@
     shortcut: null,
     loadingStatic: false,
     scanning: false,
-    shiftPressed: false
+    shiftPressed: false,
+    activeCategory: null
   };
 
   const templateHtml = `
@@ -221,6 +230,41 @@
       .shift-indicator.active {
         display: flex;
       }
+      .category-filter {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        background: rgba(34, 197, 94, 0.9);
+        color: #ffffff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+        animation: slideIn 0.2s ease;
+      }
+      .category-filter.active {
+        display: flex;
+      }
+      .category-filter .close-btn {
+        cursor: pointer;
+        padding: 0 4px;
+        opacity: 0.8;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .category-filter .close-btn:hover {
+        opacity: 1;
+      }
+      .help-hint {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        font-style: italic;
+        margin-left: 8px;
+      }
       @keyframes slideIn {
         from {
           opacity: 0;
@@ -233,6 +277,10 @@
       }
     </style>
     <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar">
+      <div class="category-filter" id="category-filter">
+        <span id="category-name"></span>
+        <span class="close-btn" id="clear-category">×</span>
+      </div>
       <div class="shift-indicator" id="shift-indicator">
         <span>⇧</span>
         <span>Abrir en nueva pestaña</span>
@@ -241,8 +289,8 @@
       <ul class="results" role="listbox"></ul>
       <div class="empty-state" hidden>No se encontraron coincidencias.</div>
       <div class="footer">
-        <span id="usage-hint">Flechas para navegar - Enter para ir - Esc para cerrar</span>
-  <span><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd></span>
+        <span id="usage-hint">Flechas para navegar - Enter para ir - Esc para cerrar<span class="help-hint">| Usa "módulo:" para filtrar</span></span>
+        <span><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd></span>
       </div>
     </div>
   `;
@@ -286,6 +334,9 @@
     const empty = shadow.querySelector(".empty-state");
     const footerHint = shadow.querySelector("#usage-hint");
     const shiftIndicator = shadow.querySelector("#shift-indicator");
+    const categoryFilter = shadow.querySelector("#category-filter");
+    const categoryName = shadow.querySelector("#category-name");
+    const clearCategory = shadow.querySelector("#clear-category");
 
     state.host = host;
     state.shadow = shadow;
@@ -295,6 +346,8 @@
     state.emptyState = empty;
     state.footerBadge = footerHint;
     state.shiftIndicator = shiftIndicator;
+    state.categoryFilter = categoryFilter;
+    state.categoryName = categoryName;
 
     input.addEventListener("input", handleQueryInput);
     input.addEventListener("keydown", handleInputKeys);
@@ -303,6 +356,16 @@
     // Listeners para detectar Shift
     overlay.addEventListener("keydown", handleShiftDown);
     overlay.addEventListener("keyup", handleShiftUp);
+    
+    // Listener para limpiar el filtro de categoría
+    clearCategory.addEventListener("click", () => {
+      clearCategoryIndicator();
+      if (state.input) {
+        state.input.value = "";
+        state.input.focus();
+        handleQueryInput({ target: state.input });
+      }
+    });
   }
 
   function toggleOverlay() {
@@ -334,10 +397,37 @@
   function handleQueryInput(event) {
     const query = event.target.value.trim();
     if (!query) {
+      clearCategoryIndicator();
       renderResults(getDefaultResults());
       return;
     }
-    const ranked = rankResults(query, state.nodes);
+    
+    // Detectar búsqueda por categoría con formato "módulo: query"
+    const categoryMatch = query.match(/^([a-záéíóúñ]+):\s*(.*)$/i);
+    let filtered = state.nodes;
+    let searchQuery = query;
+    
+    if (categoryMatch) {
+      const [, category, rest] = categoryMatch;
+      const normalizedCategory = removeAccents(category.toLowerCase());
+      
+      // Filtrar por módulo
+      filtered = state.nodes.filter(node => {
+        const nodeModule = removeAccents((node.module || "").toLowerCase());
+        return nodeModule.includes(normalizedCategory);
+      });
+      
+      searchQuery = rest.trim();
+      state.activeCategory = category;
+      
+      // Mostrar indicador visual
+      updateCategoryIndicator(category);
+    } else {
+      state.activeCategory = null;
+      clearCategoryIndicator();
+    }
+    
+    const ranked = searchQuery ? rankResults(searchQuery, filtered) : filtered.slice(0, MAX_RESULTS).map(mapNodeToResult);
     renderResults(ranked);
   }
 
@@ -448,6 +538,18 @@
     }
   }
 
+  function updateCategoryIndicator(category) {
+    if (!state.categoryFilter || !state.categoryName) return;
+    state.categoryName.textContent = `Filtrando: ${category}`;
+    state.categoryFilter.classList.add("active");
+  }
+
+  function clearCategoryIndicator() {
+    if (!state.categoryFilter) return;
+    state.categoryFilter.classList.remove("active");
+    state.activeCategory = null;
+  }
+
   function renderResults(results) {
     state.results = results;
     state.selectedIndex = 0;
@@ -524,8 +626,57 @@
   }
 
   function getDefaultResults() {
-    const nodes = state.nodes.slice().sort(compareByCategoryAndPath);
-    return nodes.slice(0, MAX_RESULTS).map(mapNodeToResult);
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentDay = now.getDay();
+    
+    // Score contextual para cada nodo
+    const contextualNodes = state.nodes.map(node => {
+      let contextScore = 0;
+      
+      // Componente de frecuencia (peso principal)
+      const usageCount = node.usage || 0;
+      contextScore += usageCount * 100;
+      
+      // Componente de recencia
+      const lastAccess = state.frequencyData.lastAccess.get(node.id);
+      if (lastAccess) {
+        const hoursSince = (Date.now() - lastAccess) / (1000 * 60 * 60);
+        contextScore += 500 * Math.exp(-hoursSince / 16);
+      }
+      
+      // Componente temporal
+      const timeKey = `${node.id}:${currentHour}`;
+      if (state.frequencyData.timeOfDay.has(timeKey)) {
+        contextScore += state.frequencyData.timeOfDay.get(timeKey) * 50;
+      }
+      
+      const dayKey = `${node.id}:${currentDay}`;
+      if (state.frequencyData.weekday.has(dayKey)) {
+        contextScore += state.frequencyData.weekday.get(dayKey) * 30;
+      }
+      
+      // Bonus por fuente estática
+      if (node.source === "static") {
+        contextScore += 20;
+      }
+      
+      // Penalización por profundidad
+      contextScore -= node.depth * 5;
+      
+      return { node, contextScore };
+    });
+    
+    // Ordenar solo por score contextual
+    contextualNodes.sort((a, b) => {
+      if (Math.abs(b.contextScore - a.contextScore) < 0.1) {
+        // Solo usar orden alfabético si scores son idénticos
+        return compareByCategoryAndPath(a.node, b.node);
+      }
+      return b.contextScore - a.contextScore;
+    });
+    
+    return contextualNodes.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
   }
 
   function mapNodeToResult(node) {
@@ -554,42 +705,171 @@
       if (score <= 0) continue;
       scored.push({ score, node });
     }
-    scored.sort((a, b) => b.score - a.score);
-    const limited = scored.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
-    return limited.sort(compareByCategoryAndPath);
+    
+    // Ordenar SOLO por score, sin reordenar alfabéticamente después
+    scored.sort((a, b) => {
+      if (Math.abs(b.score - a.score) < 0.1) {
+        // Solo si los scores son prácticamente idénticos, usar orden alfabético
+        return compareByCategoryAndPath(a.node, b.node);
+      }
+      return b.score - a.score;
+    });
+    
+    return scored.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
   }
 
   function scoreNode(tokens, node) {
     const title = node.titleLower;
     const path = node.pathLower;
-    let score = 0;
+    const description = removeAccents((node.description || "").toLowerCase());
+    let textScore = 0;
+    let matchQuality = 0; // Calidad de la coincidencia (0-1)
 
+    // Scoring por coincidencia de texto con mejor granularidad
     for (const token of tokens) {
       if (!token) continue;
-      if (title === token) score += 120;
-      else if (title.startsWith(token)) score += 90;
-      else if (title.includes(token)) score += 60;
-      else if (path.includes(token)) score += 40;
-      else if (fuzzyIncludes(title, token)) score += 25;
-      else return 0;
+      
+      let tokenScore = 0;
+      let tokenQuality = 0;
+      
+      // Coincidencia exacta en título (máxima prioridad)
+      if (title === token) {
+        tokenScore = 1000;
+        tokenQuality = 1.0;
+      }
+      // Título comienza con el token
+      else if (title.startsWith(token)) {
+        tokenScore = 800;
+        tokenQuality = 0.9;
+      }
+      // Token es una palabra completa en el título
+      else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(title)) {
+        tokenScore = 600;
+        tokenQuality = 0.8;
+      }
+      // Título contiene el token
+      else if (title.includes(token)) {
+        tokenScore = 400;
+        tokenQuality = 0.7;
+      }
+      // Path contiene el token como palabra completa
+      else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(path)) {
+        tokenScore = 300;
+        tokenQuality = 0.6;
+      }
+      // Path contiene el token
+      else if (path.includes(token)) {
+        tokenScore = 200;
+        tokenQuality = 0.5;
+      }
+      // Descripción contiene el token
+      else if (description.includes(token)) {
+        tokenScore = 150;
+        tokenQuality = 0.4;
+      }
+      // Coincidencia fuzzy en título
+      else if (fuzzyIncludes(title, token)) {
+        tokenScore = 100;
+        tokenQuality = 0.3;
+      }
+      // Coincidencia fuzzy en path
+      else if (fuzzyIncludes(path, token)) {
+        tokenScore = 50;
+        tokenQuality = 0.2;
+      }
+      // No hay coincidencia
+      else {
+        return 0; // Si falla un token, el nodo no es relevante
+      }
+      
+      textScore += tokenScore;
+      matchQuality += tokenQuality;
     }
-
-    score += (node.usage || 0) * 30;
-    score += node.source === "static" ? 8 : 0;
-    score -= node.depth * 2;
-    return score;
+    
+    // Normalizar calidad de coincidencia
+    matchQuality = matchQuality / tokens.length;
+    
+    // Componente de frecuencia (normalizado entre 0-500)
+    const usageCount = node.usage || 0;
+    const frequencyScore = Math.min(500, usageCount * 50);
+    
+    // Componente de recencia (0-300)
+    let recencyScore = 0;
+    const lastAccess = state.frequencyData.lastAccess.get(node.id);
+    if (lastAccess) {
+      const hoursSince = (Date.now() - lastAccess) / (1000 * 60 * 60);
+      // Decay más pronunciado: 100% en hora 0, 50% en 12 horas, ~10% en 48 horas
+      recencyScore = 300 * Math.exp(-hoursSince / 16);
+    }
+    
+    // Componente temporal contextual (0-200)
+    let temporalScore = 0;
+    const currentHour = new Date().getHours();
+    const currentDay = new Date().getDay();
+    const timeKey = `${node.id}:${currentHour}`;
+    const dayKey = `${node.id}:${currentDay}`;
+    
+    // Patrón por hora (más peso si se usa frecuentemente a esta hora)
+    if (state.frequencyData.timeOfDay.has(timeKey)) {
+      const hourCount = state.frequencyData.timeOfDay.get(timeKey);
+      temporalScore += Math.min(100, hourCount * 20);
+    }
+    
+    // Patrón por día (más peso si se usa frecuentemente este día)
+    if (state.frequencyData.weekday.has(dayKey)) {
+      const dayCount = state.frequencyData.weekday.get(dayKey);
+      temporalScore += Math.min(100, dayCount * 15);
+    }
+    
+    // Bonus por fuente estática (más confiable)
+    const staticBonus = node.source === "static" ? 50 : 0;
+    
+    // Penalización por profundidad (nodos más profundos son menos relevantes)
+    const depthPenalty = node.depth * 10;
+    
+    // Score final compuesto con pesos ajustados
+    let finalScore = textScore * 1.0 +                    // Coincidencia de texto (peso 100%)
+                     frequencyScore * matchQuality * 0.8 + // Frecuencia (peso 80%, modulado por calidad)
+                     recencyScore * matchQuality * 0.7 +   // Recencia (peso 70%, modulado por calidad)
+                     temporalScore * matchQuality * 0.5 +  // Contexto temporal (peso 50%, modulado por calidad)
+                     staticBonus -                         // Bonus estático
+                     depthPenalty;                         // Penalización profundidad
+    
+    // Boost adicional si coinciden TODOS los tokens perfectamente
+    if (matchQuality >= 0.9 && tokens.length > 1) {
+      finalScore *= 1.2; // 20% de boost
+    }
+    
+    return Math.max(0, finalScore);
   }
 
   function fuzzyIncludes(haystack, needle) {
-    if (needle.length <= 1) return haystack.includes(needle);
+    if (needle.length <= 2) return haystack.includes(needle);
+    
     let index = 0;
-    for (const char of haystack) {
-      if (char === needle[index]) {
-        index += 1;
-        if (index === needle.length) return true;
+    let lastMatchIndex = -1;
+    let gapCount = 0;
+    
+    for (let i = 0; i < haystack.length; i++) {
+      if (haystack[i] === needle[index]) {
+        // Penalizar gaps grandes entre caracteres
+        if (lastMatchIndex >= 0 && (i - lastMatchIndex) > 2) {
+          gapCount++;
+        }
+        lastMatchIndex = i;
+        index++;
+        if (index === needle.length) {
+          // Solo considerar fuzzy match si no hay demasiados gaps
+          return gapCount <= Math.floor(needle.length / 2);
+        }
       }
     }
+    
     return false;
+  }
+
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function removeAccents(text) {
@@ -841,17 +1121,65 @@
   function incrementUsage(selection) {
     const id = selection.id;
     const key = STORAGE_USAGE_PREFIX + id;
+    const now = Date.now();
+    const hour = new Date().getHours();
+    const day = new Date().getDay();
+    
+    // Actualizar contador básico
     const nextValue = (state.usageMap.get(id) || 0) + 1;
     state.usageMap.set(id, nextValue);
-    chrome.storage.local.set({ [key]: nextValue }).catch(() => {});
+    
+    // Análisis de frecuencia
+    const freq = state.frequencyData;
+    freq.lastAccess.set(id, now);
+    freq.accessCount.set(id, nextValue);
+    
+    // Registrar patrón temporal
+    const timeKey = `${id}:${hour}`;
+    freq.timeOfDay.set(timeKey, (freq.timeOfDay.get(timeKey) || 0) + 1);
+    
+    const dayKey = `${id}:${day}`;
+    freq.weekday.set(dayKey, (freq.weekday.get(dayKey) || 0) + 1);
+    
+    // Guardar en storage
+    chrome.storage.local.set({ 
+      [key]: nextValue,
+      [`freq:${id}`]: {
+        lastAccess: now,
+        count: nextValue,
+        timeOfDay: hour,
+        weekday: day
+      }
+    }).catch(() => {});
   }
 
   async function loadUsageCounts() {
     try {
       const keys = await chrome.storage.local.get(null);
       Object.entries(keys).forEach(([key, value]) => {
-        if (!key.startsWith(STORAGE_USAGE_PREFIX)) return;
-        state.usageMap.set(key.replace(STORAGE_USAGE_PREFIX, ""), Number(value) || 0);
+        if (key.startsWith(STORAGE_USAGE_PREFIX)) {
+          state.usageMap.set(key.replace(STORAGE_USAGE_PREFIX, ""), Number(value) || 0);
+        } else if (key.startsWith("freq:")) {
+          const id = key.replace("freq:", "");
+          const freqData = value;
+          
+          if (freqData && typeof freqData === "object") {
+            if (freqData.lastAccess) {
+              state.frequencyData.lastAccess.set(id, freqData.lastAccess);
+            }
+            if (freqData.count) {
+              state.frequencyData.accessCount.set(id, freqData.count);
+            }
+            if (typeof freqData.timeOfDay === "number") {
+              const timeKey = `${id}:${freqData.timeOfDay}`;
+              state.frequencyData.timeOfDay.set(timeKey, (state.frequencyData.timeOfDay.get(timeKey) || 0) + 1);
+            }
+            if (typeof freqData.weekday === "number") {
+              const dayKey = `${id}:${freqData.weekday}`;
+              state.frequencyData.weekday.set(dayKey, (state.frequencyData.weekday.get(dayKey) || 0) + 1);
+            }
+          }
+        }
       });
     } catch (error) {
       console.warn("IDPOS Navigator: usage stats unavailable", error);
