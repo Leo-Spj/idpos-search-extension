@@ -727,16 +727,25 @@
       return { node, contextScore };
     });
     
-    // Ordenar solo por score contextual
-    contextualNodes.sort((a, b) => {
+    // Separar deprecados de no deprecados
+    const deprecated = contextualNodes.filter(item => isDeprecated(item.node));
+    const active = contextualNodes.filter(item => !isDeprecated(item.node));
+    
+    // Ordenar cada grupo
+    const sortByContext = (a, b) => {
       if (Math.abs(b.contextScore - a.contextScore) < 0.1) {
-        // Solo usar orden alfabético si scores son idénticos
         return compareByCategoryAndPath(a.node, b.node);
       }
       return b.contextScore - a.contextScore;
-    });
+    };
     
-    return contextualNodes.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
+    active.sort(sortByContext);
+    deprecated.sort(sortByContext);
+    
+    // Combinar: primero activos, luego deprecados
+    const combined = [...active, ...deprecated];
+    
+    return combined.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
   }
 
   function mapNodeToResult(node) {
@@ -767,16 +776,25 @@
       scored.push({ score, node });
     }
     
-    // Ordenar SOLO por score, sin reordenar alfabéticamente después
-    scored.sort((a, b) => {
+    // Separar deprecados de no deprecados
+    const deprecated = scored.filter(item => isDeprecated(item.node));
+    const active = scored.filter(item => !isDeprecated(item.node));
+    
+    // Ordenar cada grupo por score
+    const sortByScore = (a, b) => {
       if (Math.abs(b.score - a.score) < 0.1) {
-        // Solo si los scores son prácticamente idénticos, usar orden alfabético
         return compareByCategoryAndPath(a.node, b.node);
       }
       return b.score - a.score;
-    });
+    };
     
-    return scored.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
+    active.sort(sortByScore);
+    deprecated.sort(sortByScore);
+    
+    // Combinar: primero activos, luego deprecados
+    const combined = [...active, ...deprecated];
+    
+    return combined.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
   }
 
   function scoreNode(tokens, node) {
@@ -1359,6 +1377,12 @@
 
   function normalizeCategory(value) {
     return (value || "").trim().toLowerCase();
+  }
+
+  function isDeprecated(node) {
+    if (!node) return false;
+    const module = normalizeCategory(node.module);
+    return module === DEPRECATED_CATEGORY_KEY || node.status === "legacy";
   }
 
 })();
