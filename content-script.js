@@ -620,16 +620,18 @@
     const description = element.getAttribute("aria-description") || element.getAttribute("aria-label") || element.getAttribute("title") || "";
     const path = deriveHierarchy(element, text);
     const idBase = url || path.join("::") || text;
+    const module = path.length > 0 ? path[0] : "";
 
     return {
       id: `dom:${idBase}`,
       title: text,
       titleLower: text.toLowerCase(),
       path,
-  pathLower: path.join(" ").toLowerCase(),
-  pathLabel: path.join(" > "),
+      pathLower: path.join(" ").toLowerCase(),
+      pathLabel: path.join(" > "),
       url,
       description,
+      module,
       depth: path.length ? path.length - 1 : 0,
       action: url ? "navigate" : "click",
       source: "dom",
