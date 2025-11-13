@@ -82,6 +82,7 @@
         font-size: 15px;
         line-height: 1.4;
         outline: none;
+        box-sizing: border-box;
       }
       .command-input::placeholder {
         color: rgba(255, 255, 255, 0.45);
@@ -94,6 +95,25 @@
         overflow-y: auto;
         border-radius: 9px;
         background: rgba(255, 255, 255, 0.04);
+      }
+      .results::-webkit-scrollbar {
+        width: 8px;
+      }
+      .results::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 9px;
+      }
+      .results::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+      }
+      .results::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      /* Scrollbar para Firefox */
+      .results {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
       }
       .result-item {
         display: flex;
