@@ -374,6 +374,18 @@
     const host = document.createElement("div");
     host.id = OVERLAY_ID;
     host.setAttribute("role", "presentation");
+    
+    // Estilos para el host para cubrir toda la pantalla
+    host.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2147480000;
+      pointer-events: none;
+    `;
+    
     const shadow = host.attachShadow({ mode: "closed" });
     shadow.innerHTML = templateHtml;
     document.documentElement.appendChild(host);
@@ -416,6 +428,9 @@
         handleQueryInput({ target: state.input });
       }
     });
+    
+    // Listener para cerrar al hacer clic fuera del overlay
+    host.addEventListener("click", handleOutsideClick);
   }
 
   function toggleOverlay() {
@@ -427,6 +442,7 @@
     if (!state.container || state.open) return;
     state.open = true;
     state.container.classList.add("open");
+    if (state.host) state.host.style.pointerEvents = "auto";
     if (state.input) {
       state.input.value = "";
       state.input.focus({ preventScroll: true });
@@ -440,8 +456,19 @@
     state.open = false;
     state.shiftPressed = false;
     state.container.classList.remove("open");
+    if (state.host) state.host.style.pointerEvents = "none";
     if (state.input) state.input.blur();
     updateShiftIndicator();
+  }
+
+  function handleOutsideClick(event) {
+    if (!state.open) return;
+    // Si el clic fue en el overlay mismo (contenido interno), no cerrar
+    if (event.target === state.container || state.container.contains(event.target)) {
+      return;
+    }
+    // Si el clic fue fuera del overlay, cerrar
+    closeOverlay();
   }
 
   function handleQueryInput(event) {
