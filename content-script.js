@@ -5,12 +5,11 @@
   const STORAGE_USAGE_PREFIX = "usage:";
   const STORAGE_SHORTCUT_KEY = "customShortcut";
   const STATIC_DATA_URL = chrome.runtime.getURL("data/navigation_tree.json");
-  const DEPRECATED_CATEGORY_KEY = "deprecado";
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
-  const SEARCH_CACHE_TTL = 1000 * 60 * 5;
-  const SEARCH_CACHE_MAX_ENTRIES = 40;
-  const STORAGE_FLUSH_DELAY = 800;
-  const ERROR_LOG_THROTTLE = 15000;
+  const RANKING_MODULE_URL = chrome.runtime.getURL("ranking.js");
+  const USAGE_FLUSH_INTERVAL = 5000;
+  const STATIC_CACHE_CATEGORY = "all";
+  const CACHE_ELIGIBLE_SOURCES = new Set(["static"]);
 
   const state = {
     open: false,
@@ -43,12 +42,45 @@
     scanning: false,
     shiftPressed: false,
     activeCategory: null,
-    nodeVersion: 0,
-    searchCache: new Map(),
-    pendingStorage: new Map(),
-    storageFlushTimer: null,
-    lastErrorLog: new Map()
+    rankingEngine: null,
+    staticVersion: 0,
+    pendingUsageUpdates: new Map(),
+    usageFlushTimer: null
   };
+
+  let rankResults = () => [];
+  let getDefaultResults = () => [];
+  let mapNodeToResult = defaultMapNodeToResult;
+  let buildCacheKey = defaultBuildCacheKey;
+  let removeAccents = defaultRemoveAccents;
+
+  function defaultMapNodeToResult(node) {
+    const source = node || {};
+    const hierarchy = source.path && source.path.length ? source.path.join(" > ") : source.title;
+    return {
+      id: source.id,
+      title: source.title,
+      description: source.description || "",
+      url: source.url,
+      action: source.action,
+      nodeRef: source.ref,
+      pathLabel: source.pathLabel || hierarchy,
+      path: source.path || [],
+      module: source.module || "",
+      usage: source.usage || 0
+    };
+  }
+
+  function defaultRemoveAccents(text) {
+    if (typeof text !== "string") return "";
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function defaultBuildCacheKey(query, category = STATIC_CACHE_CATEGORY) {
+    const normalizedQuery = defaultRemoveAccents(String(query || "").toLowerCase()).trim();
+    const normalizedCategory = defaultRemoveAccents(String(category || STATIC_CACHE_CATEGORY).toLowerCase()).trim() || STATIC_CACHE_CATEGORY;
+    return `${normalizedCategory}::${normalizedQuery}`;
+  }
 
   const templateHtml = `
     <style>
@@ -355,8 +387,6 @@
   `;
 
   document.addEventListener("keydown", handleGlobalShortcut, true);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  window.addEventListener("beforeunload", flushPendingStorage);
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "TOGGLE_OVERLAY") return;
     toggleOverlay();
@@ -369,15 +399,57 @@
     state.shortcut = normalizeShortcut(next || DEFAULT_SHORTCUT);
   });
 
+  window.addEventListener("beforeunload", () => {
+    flushUsageUpdates();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushUsageUpdates();
+    }
+  });
+
   init();
 
   async function init() {
     if (state.initialized) return;
     state.initialized = true;
-    await Promise.all([loadShortcutPreference(), loadStaticNavigation(), loadUsageCounts()]);
+    await Promise.all([
+      ensureRankingEngine(),
+      loadShortcutPreference(),
+      loadStaticNavigation(),
+      loadUsageCounts()
+    ]);
     ensureOverlay();
     scheduleScan(250);
     installObservers();
+  }
+
+  async function ensureRankingEngine() {
+    if (state.rankingEngine) return state.rankingEngine;
+    try {
+      const rankingModule = await import(RANKING_MODULE_URL);
+      state.rankingEngine = rankingModule.createRankingEngine({
+        maxResults: MAX_RESULTS,
+        frequencyData: state.frequencyData,
+        cache: {
+          ttl: 2 * 60 * 1000,
+          cleanupInterval: 10 * 60 * 1000
+        },
+        nowProvider: () => new Date()
+      });
+
+      rankResults = state.rankingEngine.rankResults;
+      getDefaultResults = (nodes, context) => state.rankingEngine.getDefaultResults(nodes, context);
+      mapNodeToResult = state.rankingEngine.mapNodeToResult;
+      buildCacheKey = state.rankingEngine.buildCacheKey;
+      removeAccents = state.rankingEngine.removeAccents;
+
+      return state.rankingEngine;
+    } catch (error) {
+      console.warn("IDPOS Navigator: ranking engine unavailable", error);
+      return null;
+    }
   }
 
   function ensureOverlay() {
@@ -459,7 +531,7 @@
       state.input.focus({ preventScroll: true });
     }
     state.selectedIndex = 0;
-    renderResults(getDefaultResults());
+  renderResults(getDefaultResults(state.nodes));
   }
 
   function closeOverlay() {
@@ -486,7 +558,7 @@
     const query = event.target.value.trim();
     if (!query) {
       clearCategoryIndicator();
-      renderResults(getDefaultResults());
+  renderResults(getDefaultResults(state.nodes));
       return;
     }
     
@@ -515,21 +587,9 @@
       clearCategoryIndicator();
     }
     
-    if (!searchQuery) {
-      const fallback = filtered.slice(0, MAX_RESULTS).map(mapNodeToResult);
-      renderResults(fallback);
-      return;
-    }
-
-    const cacheKey = buildCacheKey(searchQuery, state.activeCategory);
-    const cached = getCachedResults(cacheKey);
-    if (cached) {
-      renderResults(cached);
-      return;
-    }
-
-    const ranked = rankResults(searchQuery, filtered);
-    setCachedResults(cacheKey, ranked);
+    const ranked = searchQuery
+      ? rankResults(searchQuery, filtered, buildRankingContext(searchQuery, filtered))
+      : filtered.slice(0, MAX_RESULTS).map(mapNodeToResult).filter(Boolean);
     renderResults(ranked);
   }
 
@@ -567,6 +627,18 @@
       default:
         break;
     }
+  }
+
+  function buildRankingContext(query, nodes) {
+    if (!query || !nodes || !nodes.length) return {};
+  const cacheEligible = nodes.length > 0 && nodes.every(node => node && CACHE_ELIGIBLE_SOURCES.has(node.source));
+    if (!cacheEligible) return {};
+    const categoryKey = state.activeCategory || STATIC_CACHE_CATEGORY;
+    return {
+      cacheEligible: true,
+      cacheKey: buildCacheKey(query, categoryKey),
+      cacheVersion: state.staticVersion
+    };
   }
 
   function onResultClick(event) {
@@ -757,320 +829,24 @@
     });
   }
 
-  function getDefaultResults() {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentDay = now.getDay();
-    
-    // Score contextual para cada nodo
-    const contextualNodes = state.nodes.map(node => {
-      let contextScore = 0;
-      
-      // Componente de frecuencia (peso principal)
-      const usageCount = node.usage || 0;
-      contextScore += usageCount * 100;
-      
-      // Componente de recencia
-      const lastAccess = state.frequencyData.lastAccess.get(node.id);
-      if (lastAccess) {
-        const hoursSince = (Date.now() - lastAccess) / (1000 * 60 * 60);
-        contextScore += 500 * Math.exp(-hoursSince / 16);
-      }
-      
-      // Componente temporal
-      const timeKey = `${node.id}:${currentHour}`;
-      if (state.frequencyData.timeOfDay.has(timeKey)) {
-        contextScore += state.frequencyData.timeOfDay.get(timeKey) * 50;
-      }
-      
-      const dayKey = `${node.id}:${currentDay}`;
-      if (state.frequencyData.weekday.has(dayKey)) {
-        contextScore += state.frequencyData.weekday.get(dayKey) * 30;
-      }
-      
-      // Bonus por fuente estática
-      if (node.source === "static") {
-        contextScore += 20;
-      }
-      
-      // Penalización por profundidad
-      contextScore -= node.depth * 5;
-      
-      return { node, contextScore };
-    });
-    
-    // Separar deprecados de no deprecados
-    const deprecated = contextualNodes.filter(item => isDeprecated(item.node));
-    const active = contextualNodes.filter(item => !isDeprecated(item.node));
-    
-    // Ordenar cada grupo
-    const sortByContext = (a, b) => {
-      if (Math.abs(b.contextScore - a.contextScore) < 0.1) {
-        return compareByCategoryAndPath(a.node, b.node);
-      }
-      return b.contextScore - a.contextScore;
-    };
-    
-    active.sort(sortByContext);
-    deprecated.sort(sortByContext);
-    
-    // Combinar: primero activos, luego deprecados
-    const combined = [...active, ...deprecated];
-    
-    return combined.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
-  }
-
-  function mapNodeToResult(node) {
-    const hierarchy = node.path && node.path.length ? node.path.join(" > ") : node.title;
-    return {
-      id: node.id,
-      title: node.title,
-      description: node.description || "",
-      url: node.url,
-      action: node.action,
-      nodeRef: node.ref,
-      pathLabel: hierarchy,
-      path: node.path || [],
-      module: node.module || "",
-      usage: node.usage || 0
-    };
-  }
-
-  function buildCacheKey(query, category) {
-    const normalizedQuery = removeAccents(query.toLowerCase());
-    const normalizedCategory = removeAccents((category || "__all__").toLowerCase());
-    return `${normalizedCategory}::${normalizedQuery}`;
-  }
-
-  function getCachedResults(key) {
-    const cached = state.searchCache.get(key);
-    if (!cached) return null;
-    const expired = Date.now() - cached.timestamp > SEARCH_CACHE_TTL;
-    if (expired || cached.nodeVersion !== state.nodeVersion) {
-      state.searchCache.delete(key);
-      return null;
-    }
-    return cached.results;
-  }
-
-  function setCachedResults(key, results) {
-    state.searchCache.set(key, {
-      results,
-      timestamp: Date.now(),
-      nodeVersion: state.nodeVersion
-    });
-    pruneSearchCache();
-  }
-
-  function pruneSearchCache() {
-    while (state.searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
-      const oldest = state.searchCache.keys().next();
-      if (oldest.done) break;
-      state.searchCache.delete(oldest.value);
-    }
-  }
-
-  function rankResults(query, nodes) {
-    const sanitized = removeAccents(query.toLowerCase());
-    const tokens = sanitized.split(/\s+/).filter(Boolean);
-    if (!tokens.length) return getDefaultResults();
-
-    const scored = [];
-    for (const node of nodes) {
-      const score = scoreNode(tokens, node);
-      if (score <= 0) continue;
-      scored.push({ score, node });
-    }
-    
-    // Separar deprecados de no deprecados
-    const deprecated = scored.filter(item => isDeprecated(item.node));
-    const active = scored.filter(item => !isDeprecated(item.node));
-    
-    // Ordenar cada grupo por score
-    const sortByScore = (a, b) => {
-      if (Math.abs(b.score - a.score) < 0.1) {
-        return compareByCategoryAndPath(a.node, b.node);
-      }
-      return b.score - a.score;
-    };
-    
-    active.sort(sortByScore);
-    deprecated.sort(sortByScore);
-    
-    // Combinar: primero activos, luego deprecados
-    const combined = [...active, ...deprecated];
-    
-    return combined.slice(0, MAX_RESULTS).map(item => mapNodeToResult(item.node));
-  }
-
-  function scoreNode(tokens, node) {
-    const title = node.titleLower;
-    const path = node.pathLower;
-    const description = removeAccents((node.description || "").toLowerCase());
-    let textScore = 0;
-    let matchQuality = 0; // Calidad de la coincidencia (0-1)
-
-    // Scoring por coincidencia de texto con mejor granularidad
-    for (const token of tokens) {
-      if (!token) continue;
-      
-      let tokenScore = 0;
-      let tokenQuality = 0;
-      
-      // Coincidencia exacta en título (máxima prioridad)
-      if (title === token) {
-        tokenScore = 1000;
-        tokenQuality = 1.0;
-      }
-      // Título comienza con el token
-      else if (title.startsWith(token)) {
-        tokenScore = 800;
-        tokenQuality = 0.9;
-      }
-      // Token es una palabra completa en el título
-      else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(title)) {
-        tokenScore = 600;
-        tokenQuality = 0.8;
-      }
-      // Título contiene el token
-      else if (title.includes(token)) {
-        tokenScore = 400;
-        tokenQuality = 0.7;
-      }
-      // Path contiene el token como palabra completa
-      else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(path)) {
-        tokenScore = 300;
-        tokenQuality = 0.6;
-      }
-      // Path contiene el token
-      else if (path.includes(token)) {
-        tokenScore = 200;
-        tokenQuality = 0.5;
-      }
-      // Descripción contiene el token
-      else if (description.includes(token)) {
-        tokenScore = 150;
-        tokenQuality = 0.4;
-      }
-      // Coincidencia fuzzy en título
-      else if (fuzzyIncludes(title, token)) {
-        tokenScore = 100;
-        tokenQuality = 0.3;
-      }
-      // Coincidencia fuzzy en path
-      else if (fuzzyIncludes(path, token)) {
-        tokenScore = 50;
-        tokenQuality = 0.2;
-      }
-      // No hay coincidencia
-      else {
-        return 0; // Si falla un token, el nodo no es relevante
-      }
-      
-      textScore += tokenScore;
-      matchQuality += tokenQuality;
-    }
-    
-    // Normalizar calidad de coincidencia
-    matchQuality = matchQuality / tokens.length;
-    
-    // Componente de frecuencia (normalizado entre 0-500)
-    const usageCount = node.usage || 0;
-    const frequencyScore = Math.min(500, usageCount * 50);
-    
-    // Componente de recencia (0-300)
-    let recencyScore = 0;
-    const lastAccess = state.frequencyData.lastAccess.get(node.id);
-    if (lastAccess) {
-      const hoursSince = (Date.now() - lastAccess) / (1000 * 60 * 60);
-      // Decay más pronunciado: 100% en hora 0, 50% en 12 horas, ~10% en 48 horas
-      recencyScore = 300 * Math.exp(-hoursSince / 16);
-    }
-    
-    // Componente temporal contextual (0-200)
-    let temporalScore = 0;
-    const currentHour = new Date().getHours();
-    const currentDay = new Date().getDay();
-    const timeKey = `${node.id}:${currentHour}`;
-    const dayKey = `${node.id}:${currentDay}`;
-    
-    // Patrón por hora (más peso si se usa frecuentemente a esta hora)
-    if (state.frequencyData.timeOfDay.has(timeKey)) {
-      const hourCount = state.frequencyData.timeOfDay.get(timeKey);
-      temporalScore += Math.min(100, hourCount * 20);
-    }
-    
-    // Patrón por día (más peso si se usa frecuentemente este día)
-    if (state.frequencyData.weekday.has(dayKey)) {
-      const dayCount = state.frequencyData.weekday.get(dayKey);
-      temporalScore += Math.min(100, dayCount * 15);
-    }
-    
-    // Bonus por fuente estática (más confiable)
-    const staticBonus = node.source === "static" ? 50 : 0;
-    
-    // Penalización por profundidad (nodos más profundos son menos relevantes)
-    const depthPenalty = node.depth * 10;
-    
-    // Score final compuesto con pesos ajustados
-    let finalScore = textScore * 1.0 +                    // Coincidencia de texto (peso 100%)
-                     frequencyScore * matchQuality * 0.8 + // Frecuencia (peso 80%, modulado por calidad)
-                     recencyScore * matchQuality * 0.7 +   // Recencia (peso 70%, modulado por calidad)
-                     temporalScore * matchQuality * 0.5 +  // Contexto temporal (peso 50%, modulado por calidad)
-                     staticBonus -                         // Bonus estático
-                     depthPenalty;                         // Penalización profundidad
-    
-    // Boost adicional si coinciden TODOS los tokens perfectamente
-    if (matchQuality >= 0.9 && tokens.length > 1) {
-      finalScore *= 1.2; // 20% de boost
-    }
-    
-    return Math.max(0, finalScore);
-  }
-
-  function fuzzyIncludes(haystack, needle) {
-    if (needle.length <= 2) return haystack.includes(needle);
-    
-    let index = 0;
-    let lastMatchIndex = -1;
-    let gapCount = 0;
-    
-    for (let i = 0; i < haystack.length; i++) {
-      if (haystack[i] === needle[index]) {
-        // Penalizar gaps grandes entre caracteres
-        if (lastMatchIndex >= 0 && (i - lastMatchIndex) > 2) {
-          gapCount++;
-        }
-        lastMatchIndex = i;
-        index++;
-        if (index === needle.length) {
-          // Solo considerar fuzzy match si no hay demasiados gaps
-          return gapCount <= Math.floor(needle.length / 2);
-        }
-      }
-    }
-    
-    return false;
-  }
-
-  function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function removeAccents(text) {
-    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  }
 
   async function loadStaticNavigation() {
     state.loadingStatic = true;
     try {
       const response = await fetch(STATIC_DATA_URL);
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.warn("IDPOS Navigator: static navigation request failed", response.status);
+        return;
+      }
       const payload = await response.json();
       state.staticNodes = payload.map(item => normalizeNode(item, "static"));
+      state.staticVersion += 1;
+      if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
+        state.rankingEngine.invalidateCache();
+      }
       mergeNodes([]);
     } catch (error) {
-      logWarningThrottled("static-data", "IDPOS Navigator: static navigation not available", error);
+      console.warn("IDPOS Navigator: static navigation not available", error);
     } finally {
       state.loadingStatic = false;
     }
@@ -1290,7 +1066,6 @@
     }
 
     state.nodes = Array.from(byId.values()).filter(node => node.url || node.action === "click");
-    state.nodeVersion += 1;
 
     if (state.footerBadge) {
       const total = state.nodes.length;
@@ -1299,75 +1074,80 @@
 
     if (state.open) {
       const query = state.input ? state.input.value.trim() : "";
-      if (query) renderResults(rankResults(query, state.nodes));
-      else renderResults(getDefaultResults());
+      if (query) {
+        const context = buildRankingContext(query, state.nodes);
+        renderResults(rankResults(query, state.nodes, context));
+      } else {
+        renderResults(getDefaultResults(state.nodes));
+      }
     }
   }
 
   function incrementUsage(selection) {
+    if (!selection || !selection.id) return;
     const id = selection.id;
     const now = Date.now();
-    const hour = new Date().getHours();
-    const day = new Date().getDay();
+    const current = new Date(now);
+    const hour = current.getHours();
+    const day = current.getDay();
     
-    // Actualizar contador básico
     const nextValue = (state.usageMap.get(id) || 0) + 1;
     state.usageMap.set(id, nextValue);
     
-    // Análisis de frecuencia
     const freq = state.frequencyData;
     freq.lastAccess.set(id, now);
     freq.accessCount.set(id, nextValue);
     
-    // Registrar patrón temporal
     const timeKey = `${id}:${hour}`;
     freq.timeOfDay.set(timeKey, (freq.timeOfDay.get(timeKey) || 0) + 1);
     
     const dayKey = `${id}:${day}`;
     freq.weekday.set(dayKey, (freq.weekday.get(dayKey) || 0) + 1);
-    
-    queueUsagePersist(id, nextValue, {
-      lastAccess: now,
-      count: nextValue,
-      timeOfDay: hour,
-      weekday: day
+
+    queueUsagePersistence(id, nextValue, { lastAccess: now, count: nextValue, timeOfDay: hour, weekday: day });
+  }
+
+  function queueUsagePersistence(id, usageValue, frequencySnapshot) {
+    state.pendingUsageUpdates.set(id, {
+      usage: usageValue,
+      frequency: frequencySnapshot
     });
+    scheduleUsageFlush();
   }
 
-  function queueUsagePersist(id, usageValue, frequencyPayload) {
-    state.pendingStorage.set(STORAGE_USAGE_PREFIX + id, usageValue);
-    state.pendingStorage.set(`freq:${id}`, frequencyPayload);
-    scheduleStorageFlush();
+  function scheduleUsageFlush() {
+    if (state.usageFlushTimer) return;
+    state.usageFlushTimer = window.setTimeout(() => {
+      state.usageFlushTimer = null;
+      flushUsageUpdates();
+    }, USAGE_FLUSH_INTERVAL);
   }
 
-  function scheduleStorageFlush() {
-    if (state.storageFlushTimer) return;
-    state.storageFlushTimer = window.setTimeout(() => {
-      state.storageFlushTimer = null;
-      flushPendingStorage();
-    }, STORAGE_FLUSH_DELAY);
-  }
-
-  function flushPendingStorage() {
-    if (state.storageFlushTimer) {
-      clearTimeout(state.storageFlushTimer);
-      state.storageFlushTimer = null;
+  async function flushUsageUpdates() {
+    if (!state.pendingUsageUpdates.size) {
+      if (state.usageFlushTimer) {
+        window.clearTimeout(state.usageFlushTimer);
+        state.usageFlushTimer = null;
+      }
+      return;
     }
-    if (!state.pendingStorage.size) return;
 
     const payload = {};
-    for (const [key, value] of state.pendingStorage.entries()) {
-      payload[key] = value;
+    for (const [id, data] of state.pendingUsageUpdates.entries()) {
+      payload[STORAGE_USAGE_PREFIX + id] = data.usage;
+      payload[`freq:${id}`] = data.frequency;
     }
-    state.pendingStorage.clear();
+
+    state.pendingUsageUpdates.clear();
+    if (state.usageFlushTimer) {
+      window.clearTimeout(state.usageFlushTimer);
+      state.usageFlushTimer = null;
+    }
 
     try {
-      const maybePromise = chrome.storage.local.set(payload);
-      if (maybePromise && typeof maybePromise.catch === "function") {
-        maybePromise.catch(error => logWarningThrottled("storage", "IDPOS Navigator: storage persist failed", error));
-      }
+      await chrome.storage.local.set(payload);
     } catch (error) {
-      logWarningThrottled("storage", "IDPOS Navigator: storage persist failed", error);
+      console.warn("IDPOS Navigator: failed to persist usage batch", error);
     }
   }
 
@@ -1399,8 +1179,12 @@
           }
         }
       });
+
+      if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
+        state.rankingEngine.invalidateCache();
+      }
     } catch (error) {
-      logWarningThrottled("usage-load", "IDPOS Navigator: usage stats unavailable", error);
+      console.warn("IDPOS Navigator: usage stats unavailable", error);
     }
   }
 
@@ -1447,12 +1231,6 @@
     toggleOverlay();
   }
 
-  function handleVisibilityChange() {
-    if (document.visibilityState === "hidden") {
-      flushPendingStorage();
-    }
-  }
-
   function matchesShortcut(event, shortcut) {
     if (!shortcut) return false;
     const key = normalizeKey(event.key);
@@ -1472,6 +1250,7 @@
       const store = await chrome.storage.local.get(STORAGE_SHORTCUT_KEY);
       state.shortcut = normalizeShortcut(store[STORAGE_SHORTCUT_KEY] || DEFAULT_SHORTCUT);
     } catch (error) {
+      console.warn("IDPOS Navigator: shortcut preference unavailable", error);
       state.shortcut = normalizeShortcut(DEFAULT_SHORTCUT);
     }
   }
@@ -1499,43 +1278,5 @@
     }
   }
 
-  function logWarningThrottled(channel, ...args) {
-    const now = Date.now();
-    const last = state.lastErrorLog.get(channel) || 0;
-    if (now - last < ERROR_LOG_THROTTLE) return;
-    state.lastErrorLog.set(channel, now);
-    console.warn(...args);
-  }
-
-  function compareByCategoryAndPath(a, b) {
-    const categoryA = normalizeCategory(a.module);
-    const categoryB = normalizeCategory(b.module);
-
-    const deprecatedA = categoryA === DEPRECATED_CATEGORY_KEY;
-    const deprecatedB = categoryB === DEPRECATED_CATEGORY_KEY;
-    if (deprecatedA !== deprecatedB) return deprecatedA ? 1 : -1;
-
-    const categoryCompare = categoryA.localeCompare(categoryB, "es", { sensitivity: "base" });
-    if (categoryCompare !== 0) return categoryCompare;
-
-    const pathA = String((a.pathLabel || "").trim());
-    const pathB = String((b.pathLabel || "").trim());
-    const pathCompare = pathA.localeCompare(pathB, "es", { sensitivity: "base" });
-    if (pathCompare !== 0) return pathCompare;
-
-    const titleA = String((a.title || "").trim());
-    const titleB = String((b.title || "").trim());
-    return titleA.localeCompare(titleB, "es", { sensitivity: "base" });
-  }
-
-  function normalizeCategory(value) {
-    return (value || "").trim().toLowerCase();
-  }
-
-  function isDeprecated(node) {
-    if (!node) return false;
-    const module = normalizeCategory(node.module);
-    return module === DEPRECATED_CATEGORY_KEY || node.status === "legacy";
-  }
 
 })();

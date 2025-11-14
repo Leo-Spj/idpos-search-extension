@@ -15,6 +15,8 @@ chrome.action.onClicked.addListener(async tab => {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get({ customShortcut: null }).then(store => {
     if (store.customShortcut) return;
-    chrome.storage.local.set({ customShortcut: { meta: false, ctrl: true, shift: true, alt: false, key: "k" } });
-  }).catch(() => {});
+    return chrome.storage.local.set({ customShortcut: { meta: false, ctrl: true, shift: true, alt: false, key: "k" } });
+  }).catch(error => {
+    console.warn("IDPOS Navigator: unable to seed default shortcut", error);
+  });
 });

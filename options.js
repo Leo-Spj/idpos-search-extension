@@ -24,6 +24,11 @@ function init() {
 
 function loadShortcut() {
   chrome.storage.local.get(STORAGE_KEY, data => {
+    if (chrome.runtime.lastError) {
+      console.warn("IDPOS Navigator: unable to load shortcut", chrome.runtime.lastError);
+      updateShortcut(DEFAULT_SHORTCUT);
+      return;
+    }
     const raw = data[STORAGE_KEY] || DEFAULT_SHORTCUT;
     updateShortcut(raw);
   });
@@ -124,7 +129,12 @@ function updateShortcut(shortcut) {
 
 function saveShortcut(shortcut) {
   return new Promise(resolve => {
-    chrome.storage.local.set({ [STORAGE_KEY]: shortcut }, resolve);
+    chrome.storage.local.set({ [STORAGE_KEY]: shortcut }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn("IDPOS Navigator: unable to persist shortcut", chrome.runtime.lastError);
+      }
+      resolve();
+    });
   });
 }
 

@@ -31,7 +31,10 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["data/navigation_tree.json"],
+      "resources": [
+        "data/navigation_tree.json",
+        "ranking.js"
+      ],
       "matches": ["https://pos.idbi.pe/*"]
     }
   ]
