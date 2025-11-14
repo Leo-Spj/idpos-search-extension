@@ -7,6 +7,10 @@
   const STATIC_DATA_URL = chrome.runtime.getURL("data/navigation_tree.json");
   const DEPRECATED_CATEGORY_KEY = "deprecado";
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
+  const SEARCH_CACHE_TTL = 1000 * 60 * 5;
+  const SEARCH_CACHE_MAX_ENTRIES = 40;
+  const STORAGE_FLUSH_DELAY = 800;
+  const ERROR_LOG_THROTTLE = 15000;
 
   const state = {
     open: false,
@@ -38,7 +42,12 @@
     loadingStatic: false,
     scanning: false,
     shiftPressed: false,
-    activeCategory: null
+    activeCategory: null,
+    nodeVersion: 0,
+    searchCache: new Map(),
+    pendingStorage: new Map(),
+    storageFlushTimer: null,
+    lastErrorLog: new Map()
   };
 
   const templateHtml = `
@@ -346,6 +355,8 @@
   `;
 
   document.addEventListener("keydown", handleGlobalShortcut, true);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("beforeunload", flushPendingStorage);
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "TOGGLE_OVERLAY") return;
     toggleOverlay();
@@ -504,7 +515,21 @@
       clearCategoryIndicator();
     }
     
-    const ranked = searchQuery ? rankResults(searchQuery, filtered) : filtered.slice(0, MAX_RESULTS).map(mapNodeToResult);
+    if (!searchQuery) {
+      const fallback = filtered.slice(0, MAX_RESULTS).map(mapNodeToResult);
+      renderResults(fallback);
+      return;
+    }
+
+    const cacheKey = buildCacheKey(searchQuery, state.activeCategory);
+    const cached = getCachedResults(cacheKey);
+    if (cached) {
+      renderResults(cached);
+      return;
+    }
+
+    const ranked = rankResults(searchQuery, filtered);
+    setCachedResults(cacheKey, ranked);
     renderResults(ranked);
   }
 
@@ -811,6 +836,40 @@
     };
   }
 
+  function buildCacheKey(query, category) {
+    const normalizedQuery = removeAccents(query.toLowerCase());
+    const normalizedCategory = removeAccents((category || "__all__").toLowerCase());
+    return `${normalizedCategory}::${normalizedQuery}`;
+  }
+
+  function getCachedResults(key) {
+    const cached = state.searchCache.get(key);
+    if (!cached) return null;
+    const expired = Date.now() - cached.timestamp > SEARCH_CACHE_TTL;
+    if (expired || cached.nodeVersion !== state.nodeVersion) {
+      state.searchCache.delete(key);
+      return null;
+    }
+    return cached.results;
+  }
+
+  function setCachedResults(key, results) {
+    state.searchCache.set(key, {
+      results,
+      timestamp: Date.now(),
+      nodeVersion: state.nodeVersion
+    });
+    pruneSearchCache();
+  }
+
+  function pruneSearchCache() {
+    while (state.searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+      const oldest = state.searchCache.keys().next();
+      if (oldest.done) break;
+      state.searchCache.delete(oldest.value);
+    }
+  }
+
   function rankResults(query, nodes) {
     const sanitized = removeAccents(query.toLowerCase());
     const tokens = sanitized.split(/\s+/).filter(Boolean);
@@ -1011,7 +1070,7 @@
       state.staticNodes = payload.map(item => normalizeNode(item, "static"));
       mergeNodes([]);
     } catch (error) {
-      console.warn("IDPOS Navigator: static navigation not available", error);
+      logWarningThrottled("static-data", "IDPOS Navigator: static navigation not available", error);
     } finally {
       state.loadingStatic = false;
     }
@@ -1231,10 +1290,11 @@
     }
 
     state.nodes = Array.from(byId.values()).filter(node => node.url || node.action === "click");
+    state.nodeVersion += 1;
 
     if (state.footerBadge) {
       const total = state.nodes.length;
-  state.footerBadge.textContent = `Flechas para navegar - Enter para ir - Esc para cerrar - ${total} rutas indexadas`;
+      state.footerBadge.textContent = `Flechas para navegar - Enter para ir - Esc para cerrar - ${total} rutas indexadas`;
     }
 
     if (state.open) {
@@ -1246,7 +1306,6 @@
 
   function incrementUsage(selection) {
     const id = selection.id;
-    const key = STORAGE_USAGE_PREFIX + id;
     const now = Date.now();
     const hour = new Date().getHours();
     const day = new Date().getDay();
@@ -1267,16 +1326,49 @@
     const dayKey = `${id}:${day}`;
     freq.weekday.set(dayKey, (freq.weekday.get(dayKey) || 0) + 1);
     
-    // Guardar en storage
-    chrome.storage.local.set({ 
-      [key]: nextValue,
-      [`freq:${id}`]: {
-        lastAccess: now,
-        count: nextValue,
-        timeOfDay: hour,
-        weekday: day
+    queueUsagePersist(id, nextValue, {
+      lastAccess: now,
+      count: nextValue,
+      timeOfDay: hour,
+      weekday: day
+    });
+  }
+
+  function queueUsagePersist(id, usageValue, frequencyPayload) {
+    state.pendingStorage.set(STORAGE_USAGE_PREFIX + id, usageValue);
+    state.pendingStorage.set(`freq:${id}`, frequencyPayload);
+    scheduleStorageFlush();
+  }
+
+  function scheduleStorageFlush() {
+    if (state.storageFlushTimer) return;
+    state.storageFlushTimer = window.setTimeout(() => {
+      state.storageFlushTimer = null;
+      flushPendingStorage();
+    }, STORAGE_FLUSH_DELAY);
+  }
+
+  function flushPendingStorage() {
+    if (state.storageFlushTimer) {
+      clearTimeout(state.storageFlushTimer);
+      state.storageFlushTimer = null;
+    }
+    if (!state.pendingStorage.size) return;
+
+    const payload = {};
+    for (const [key, value] of state.pendingStorage.entries()) {
+      payload[key] = value;
+    }
+    state.pendingStorage.clear();
+
+    try {
+      const maybePromise = chrome.storage.local.set(payload);
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(error => logWarningThrottled("storage", "IDPOS Navigator: storage persist failed", error));
       }
-    }).catch(() => {});
+    } catch (error) {
+      logWarningThrottled("storage", "IDPOS Navigator: storage persist failed", error);
+    }
   }
 
   async function loadUsageCounts() {
@@ -1308,7 +1400,7 @@
         }
       });
     } catch (error) {
-      console.warn("IDPOS Navigator: usage stats unavailable", error);
+      logWarningThrottled("usage-load", "IDPOS Navigator: usage stats unavailable", error);
     }
   }
 
@@ -1355,6 +1447,12 @@
     toggleOverlay();
   }
 
+  function handleVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      flushPendingStorage();
+    }
+  }
+
   function matchesShortcut(event, shortcut) {
     if (!shortcut) return false;
     const key = normalizeKey(event.key);
@@ -1399,6 +1497,14 @@
       case "ArrowRight": return "arrowright";
       default: return key.toLowerCase();
     }
+  }
+
+  function logWarningThrottled(channel, ...args) {
+    const now = Date.now();
+    const last = state.lastErrorLog.get(channel) || 0;
+    if (now - last < ERROR_LOG_THROTTLE) return;
+    state.lastErrorLog.set(channel, now);
+    console.warn(...args);
   }
 
   function compareByCategoryAndPath(a, b) {
