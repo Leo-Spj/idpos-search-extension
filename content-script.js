@@ -124,6 +124,13 @@
         line-height: 1.4;
         outline: none;
         box-sizing: border-box;
+        transition: padding 180ms ease;
+      }
+      .command-input.has-category-filter {
+        padding-left: 160px;
+      }
+      .command-input.has-shift-indicator {
+        padding-right: 180px;
       }
       .command-input::placeholder {
         color: rgba(255, 255, 255, 0.45);
@@ -304,8 +311,9 @@
       }
       .shift-indicator {
         position: absolute;
-        top: 12px;
-        right: 12px;
+        top: 24px;
+        right: 24px;
+        transform: translateY(-50%);
         background: rgba(59, 130, 246, 0.9);
         color: #ffffff;
         padding: 6px 12px;
@@ -317,14 +325,16 @@
         gap: 6px;
         box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         animation: slideIn 0.2s ease;
+        pointer-events: none;
       }
       .shift-indicator.active {
         display: flex;
       }
       .category-filter {
         position: absolute;
-        top: 12px;
-        left: 12px;
+        top: 24px;
+        left: 24px;
+        transform: translateY(-50%);
         background: rgba(34, 197, 94, 0.9);
         color: #ffffff;
         padding: 6px 12px;
@@ -336,6 +346,7 @@
         gap: 6px;
         box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
         animation: slideIn 0.2s ease;
+        pointer-events: none;
       }
       .category-filter.active {
         display: flex;
@@ -346,6 +357,7 @@
         opacity: 0.8;
         font-size: 16px;
         line-height: 1;
+        pointer-events: all;
       }
       .category-filter .close-btn:hover {
         opacity: 1;
@@ -359,24 +371,26 @@
       @keyframes slideIn {
         from {
           opacity: 0;
-          transform: translateY(-4px);
+          transform: translateY(-50%) scale(0.95);
         }
         to {
           opacity: 1;
-          transform: translateY(0);
+          transform: translateY(-50%) scale(1);
         }
       }
     </style>
     <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar">
-      <div class="category-filter" id="category-filter">
-        <span id="category-name"></span>
-        <span class="close-btn" id="clear-category">×</span>
+      <div style="position: relative;">
+        <div class="category-filter" id="category-filter">
+          <span id="category-name"></span>
+          <span class="close-btn" id="clear-category">×</span>
+        </div>
+        <div class="shift-indicator" id="shift-indicator">
+          <span>⇧</span>
+          <span>Abrir en nueva pestaña</span>
+        </div>
+        <input class="command-input" type="text" placeholder="Buscar módulos, rutas o acciones" autocomplete="off" spellcheck="false" aria-label="Buscar" />
       </div>
-      <div class="shift-indicator" id="shift-indicator">
-        <span>⇧</span>
-        <span>Abrir en nueva pestaña</span>
-      </div>
-      <input class="command-input" type="text" placeholder="Buscar módulos, rutas o acciones" autocomplete="off" spellcheck="false" aria-label="Buscar" />
       <ul class="results" role="listbox"></ul>
       <div class="empty-state" hidden>No se encontraron coincidencias.</div>
       <div class="footer">
@@ -704,23 +718,27 @@
   }
 
   function updateShiftIndicator() {
-    if (!state.shiftIndicator) return;
+    if (!state.shiftIndicator || !state.input) return;
     if (state.shiftPressed) {
       state.shiftIndicator.classList.add("active");
+      state.input.classList.add("has-shift-indicator");
     } else {
       state.shiftIndicator.classList.remove("active");
+      state.input.classList.remove("has-shift-indicator");
     }
   }
 
   function updateCategoryIndicator(category) {
-    if (!state.categoryFilter || !state.categoryName) return;
+    if (!state.categoryFilter || !state.categoryName || !state.input) return;
     state.categoryName.textContent = `Filtrando: ${category}`;
     state.categoryFilter.classList.add("active");
+    state.input.classList.add("has-category-filter");
   }
 
   function clearCategoryIndicator() {
-    if (!state.categoryFilter) return;
+    if (!state.categoryFilter || !state.input) return;
     state.categoryFilter.classList.remove("active");
+    state.input.classList.remove("has-category-filter");
     state.activeCategory = null;
   }
 
