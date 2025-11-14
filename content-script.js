@@ -56,7 +56,7 @@
 
   function defaultMapNodeToResult(node) {
     const source = node || {};
-    const hierarchy = source.path && source.path.length ? source.path.join(" > ") : source.title;
+    const hierarchy = source.tag && source.tag.length ? source.tag.join(" > ") : source.title;
     return {
       id: source.id,
       title: source.title,
@@ -65,7 +65,7 @@
       action: source.action,
       nodeRef: source.ref,
       pathLabel: source.pathLabel || hierarchy,
-      path: source.path || [],
+      tag: source.tag || [],
       module: source.module || "",
       usage: source.usage || 0
     };
@@ -792,12 +792,12 @@
       titleWrapper.appendChild(titleSpan);
 
       // Agregar etiquetas de path en el lado derecho
-      if (item.path && item.path.length > 1) {
+      if (item.tag && item.tag.length > 1) {
         const pathTags = document.createElement("div");
         pathTags.className = "result-path-tags";
         
         // Mostrar el path completo excepto el último elemento (que suele ser el título)
-        const pathToShow = item.path.slice(0, -1);
+        const pathToShow = item.tag.slice(0, -1);
         
         pathToShow.forEach((pathPart, idx) => {
           if (idx > 0) {
@@ -872,16 +872,16 @@
 
   function normalizeNode(raw, source) {
     const id = raw.id || `${source}:${raw.url || raw.title}`;
-    const path = Array.isArray(raw.path) ? raw.path : buildPath(raw.pathLabel);
-    const depth = path.length ? path.length - 1 : 0;
-    const title = raw.title || (path.length ? path[path.length - 1] : "");
+    const tag = Array.isArray(raw.tag) ? raw.tag : buildPath(raw.pathLabel);
+    const depth = tag.length ? tag.length - 1 : 0;
+    const title = raw.title || (tag.length ? tag[tag.length - 1] : "");
     return {
       id,
       title,
       titleLower: removeAccents(title.toLowerCase()),
-      path,
-      pathLower: removeAccents(path.join(" ").toLowerCase()),
-      pathLabel: raw.pathLabel || path.join(" > "),
+      tag,
+      tagLower: removeAccents(tag.join(" ").toLowerCase()),
+      pathLabel: raw.pathLabel || tag.join(" > "),
       url: absoluteUrl(raw.url),
       description: raw.description || "",
       module: raw.module || "",
@@ -980,21 +980,21 @@
     }
 
     const description = element.getAttribute("aria-description") || element.getAttribute("aria-label") || element.getAttribute("title") || "";
-    const path = deriveHierarchy(element, text);
-    const idBase = url || path.join("::") || text;
-    const module = path.length > 0 ? path[0] : "";
+    const tag = deriveHierarchy(element, text);
+    const idBase = url || tag.join("::") || text;
+    const module = tag.length > 0 ? tag[0] : "";
 
     return {
       id: `dom:${idBase}`,
       title: text,
       titleLower: removeAccents(text.toLowerCase()),
-      path,
-      pathLower: removeAccents(path.join(" ").toLowerCase()),
-      pathLabel: path.join(" > "),
+      tag,
+      tagLower: removeAccents(tag.join(" ").toLowerCase()),
+      pathLabel: tag.join(" > "),
       url,
       description,
       module,
-      depth: path.length ? path.length - 1 : 0,
+      depth: tag.length ? tag.length - 1 : 0,
       action: url ? "navigate" : "click",
       source: "dom",
       ref: element,

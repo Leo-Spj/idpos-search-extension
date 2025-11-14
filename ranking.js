@@ -191,7 +191,7 @@ function computeContextScore(node, frequencyData, now) {
 
 function scoreNode(tokens, node, frequencyData, now) {
   const title = node.titleLower || removeAccents(String(node.title || "").toLowerCase());
-  const path = node.pathLower || removeAccents((node.path || []).join(" ").toLowerCase());
+  const tag = node.tagLower || removeAccents((node.tag || []).join(" ").toLowerCase());
   const description = removeAccents(String(node.description || "").toLowerCase());
 
   let textScore = 0;
@@ -215,10 +215,10 @@ function scoreNode(tokens, node, frequencyData, now) {
     } else if (title.includes(token)) {
       tokenScore = 400;
       tokenQuality = 0.7;
-    } else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(path)) {
+    } else if (new RegExp(`\\b${escapeRegex(token)}\\b`).test(tag)) {
       tokenScore = 300;
       tokenQuality = 0.6;
-    } else if (path.includes(token)) {
+    } else if (tag.includes(token)) {
       tokenScore = 200;
       tokenQuality = 0.5;
     } else if (description.includes(token)) {
@@ -227,7 +227,7 @@ function scoreNode(tokens, node, frequencyData, now) {
     } else if (fuzzyIncludes(title, token)) {
       tokenScore = 100;
       tokenQuality = 0.3;
-    } else if (fuzzyIncludes(path, token)) {
+    } else if (fuzzyIncludes(tag, token)) {
       tokenScore = 50;
       tokenQuality = 0.2;
     } else {
@@ -284,7 +284,7 @@ function scoreNode(tokens, node, frequencyData, now) {
 }
 
 function mapNodeToResult(node) {
-  const hierarchy = node.path && node.path.length ? node.path.join(" > ") : node.title;
+  const hierarchy = node.tag && node.tag.length ? node.tag.join(" > ") : node.title;
   return {
     id: node.id,
     title: node.title,
@@ -293,7 +293,7 @@ function mapNodeToResult(node) {
     action: node.action,
     nodeRef: node.ref,
     pathLabel: node.pathLabel || hierarchy,
-    path: node.path || [],
+    tag: node.tag || [],
     module: node.module || "",
     usage: node.usage || 0
   };
