@@ -202,55 +202,56 @@
         white-space: nowrap;
         flex-shrink: 0;
       }
-      .module-badge.ventas {
+      /* Colores dinámicos basados en hash - Se aplican automáticamente a todos los módulos */
+      .module-badge.dynamic-0 {
         background: rgba(59, 130, 246, 0.25);
         color: #93c5fd;
         border: 1px solid rgba(59, 130, 246, 0.4);
       }
-      .module-badge.inventarios {
+      .module-badge.dynamic-1 {
         background: rgba(168, 85, 247, 0.25);
         color: #d8b4fe;
         border: 1px solid rgba(168, 85, 247, 0.4);
       }
-      .module-badge.compras {
+      .module-badge.dynamic-2 {
         background: rgba(34, 197, 94, 0.25);
         color: #86efac;
         border: 1px solid rgba(34, 197, 94, 0.4);
       }
-      .module-badge.reportes {
+      .module-badge.dynamic-3 {
         background: rgba(251, 146, 60, 0.25);
         color: #fdba74;
         border: 1px solid rgba(251, 146, 60, 0.4);
       }
-      .module-badge.dashboard {
+      .module-badge.dynamic-4 {
         background: rgba(236, 72, 153, 0.25);
         color: #f9a8d4;
         border: 1px solid rgba(236, 72, 153, 0.4);
       }
-      .module-badge.produccion {
+      .module-badge.dynamic-5 {
         background: rgba(14, 165, 233, 0.25);
         color: #7dd3fc;
         border: 1px solid rgba(14, 165, 233, 0.4);
       }
-      .module-badge.cajas {
+      .module-badge.dynamic-6 {
         background: rgba(234, 179, 8, 0.25);
         color: #fde047;
         border: 1px solid rgba(234, 179, 8, 0.4);
       }
-      .module-badge.servicios {
+      .module-badge.dynamic-7 {
         background: rgba(20, 184, 166, 0.25);
         color: #5eead4;
         border: 1px solid rgba(20, 184, 166, 0.4);
       }
-      .module-badge.kds {
+      .module-badge.dynamic-8 {
         background: rgba(239, 68, 68, 0.25);
         color: #fca5a5;
         border: 1px solid rgba(239, 68, 68, 0.4);
       }
-      .module-badge.default {
-        background: rgba(148, 163, 184, 0.25);
-        color: #cbd5e1;
-        border: 1px solid rgba(148, 163, 184, 0.4);
+      .module-badge.dynamic-9 {
+        background: rgba(124, 58, 237, 0.25);
+        color: #c4b5fd;
+        border: 1px solid rgba(124, 58, 237, 0.4);
       }
       .result-title {
         font-size: 15px;
@@ -993,23 +994,25 @@
   }
 
   function getModuleClass(module) {
+    if (!module) return "dynamic-0";
+    
     const normalized = module.toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
     
-    const moduleMap = {
-      "ventas": "ventas",
-      "inventarios": "inventarios",
-      "compras": "compras",
-      "reportes": "reportes",
-      "dashboard": "dashboard",
-      "produccion": "produccion",
-      "cajas": "cajas",
-      "servicios": "servicios",
-      "kds": "kds"
-    };
-    
-    return moduleMap[normalized] || "default";
+    // Todos los módulos usan colores dinámicos basados en hash
+    // Esto asegura que el mismo módulo siempre tenga el mismo color
+    // sin importar el dominio
+    return "dynamic-" + simpleHash(normalized);
+  }
+  
+  function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash % 10); // 10 variantes de color
   }
 
   function buildPath(path) {

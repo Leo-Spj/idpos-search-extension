@@ -8,7 +8,7 @@ const rowsPerPage = 50;
 let isEditMode = false;
 let editingRouteId = null;
 let pendingImportRoutes = [];
-let importMode = 'REPLACE_ALL';
+let importMode = 'MERGE'; // Debe coincidir con el valor checked en el HTML
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
