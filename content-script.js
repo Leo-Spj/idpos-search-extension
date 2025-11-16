@@ -4,8 +4,10 @@
   const MUTATION_THROTTLE = 2000;
   const STORAGE_USAGE_PREFIX = "usage:";
   const STORAGE_SHORTCUT_KEY = "customShortcut";
-  const STATIC_DATA_URL = chrome.runtime.getURL("data/navigation_tree.json");
+  const STORAGE_ROUTES_KEY = "navigatorRoutes";
+  const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
+  const currentDomain = window.location.hostname;
   const RANKING_MODULE_URL = chrome.runtime.getURL("ranking.js");
   const USAGE_FLUSH_INTERVAL = 5000;
   const STATIC_CACHE_CATEGORY = "all";
@@ -851,23 +853,106 @@
   async function loadStaticNavigation() {
     state.loadingStatic = true;
     try {
-      const response = await fetch(STATIC_DATA_URL);
-      if (!response.ok) {
-        console.warn("IDPOS Navigator: static navigation request failed", response.status);
-        return;
+      const currentDomain = window.location.hostname;
+      const STORAGE_ROUTES_KEY = "navigatorRoutes";
+      const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
+      
+      // Intentar cargar desde storage primero
+      const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY);
+      let routes = stored[STORAGE_ROUTES_KEY] || [];
+      
+      // Si no hay rutas en storage, cargar desde CSV por defecto
+      if (routes.length === 0) {
+        const response = await fetch(CSV_DATA_URL);
+        const csvText = await response.text();
+        routes = parseRoutesCSV(csvText);
+        await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes });
       }
-      const payload = await response.json();
-      state.staticNodes = payload.map(item => normalizeNode(item, "static"));
+      
+      // Filtrar por dominio actual
+      const domainRoutes = routes.filter(route => route.domain === currentDomain);
+      
+      // Convertir a formato de nodos
+      state.staticNodes = domainRoutes.map(route => ({
+        id: route.id,
+        title: route.title,
+        titleLower: removeAccents(String(route.title || "").toLowerCase()),
+        module: route.module,
+        description: route.description || "",
+        tag: Array.isArray(route.tag) ? route.tag : (route.tag ? String(route.tag).split("|").filter(t => t.trim()) : []),
+        tagLower: removeAccents((Array.isArray(route.tag) ? route.tag.join(" ") : String(route.tag || "").replace(/\\|/g, " ")).toLowerCase()),
+        pathLabel: Array.isArray(route.tag) ? route.tag.join(" · ") : String(route.tag || "").replace(/\\|/g, " · "),
+        url: absoluteUrl(route.url),
+        action: "navigate",
+        source: "static",
+        usage: state.usageMap.get(route.id) || 0,
+        depth: Array.isArray(route.tag) ? route.tag.length - 1 : (route.tag ? String(route.tag).split("|").length - 1 : 0),
+        status: route.status || "active"
+      }));
+      
       state.staticVersion += 1;
       if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
         state.rankingEngine.invalidateCache();
       }
       mergeNodes([]);
     } catch (error) {
-      console.warn("IDPOS Navigator: static navigation not available", error);
+      console.warn("Navigator: static navigation not available", error);
     } finally {
       state.loadingStatic = false;
     }
+  }
+  
+  function parseRoutesCSV(csvText) {
+    const lines = csvText.trim().split("\\n");
+    if (lines.length <= 1) return [];
+    
+    const routes = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      
+      const values = parseCSVLineValues(line);
+      if (values.length < 8) continue;
+      
+      const route = {
+        domain: values[0] || "",
+        id: values[1] || "",
+        module: values[2] || "",
+        title: values[3] || "",
+        url: values[4] || "",
+        tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
+        description: values[6] || "",
+        status: values[7] || "active"
+      };
+      
+      if (route.domain && route.id && route.title) {
+        routes.push(route);
+      }
+    }
+    
+    return routes;
+  }
+  
+  function parseCSVLineValues(line) {
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        values.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    
+    values.push(current.trim());
+    return values;
   }
 
   function normalizeNode(raw, source) {

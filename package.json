@@ -1,8 +1,19 @@
 {
-  "name": "idpos-search-extension",
-  "version": "0.1.0",
+  "name": "universal-navigator",
+  "version": "0.2.0",
+  "description": "Universal navigation command bar for any website with CSV-based route management",
   "type": "module",
   "scripts": {
     "test": "node --test"
-  }
+  },
+  "keywords": [
+    "chrome-extension",
+    "navigation",
+    "command-bar",
+    "productivity",
+    "csv",
+    "multi-domain"
+  ],
+  "author": "Leo-Spj",
+  "license": "MIT"
 }

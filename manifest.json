@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "ID POS Navigator",
-  "description": "Floating command bar to accelerate navigation within ID POS.",
-  "version": "0.1.0",
-  "permissions": ["activeTab", "storage", "scripting"],
-  "host_permissions": ["https://pos.idbi.pe/*"],
+  "name": "Universal Navigator",
+  "description": "Floating command bar to accelerate navigation on any website with custom routes.",
+  "version": "0.2.0",
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -15,16 +15,17 @@
         "default": "Ctrl+Shift+K",
         "mac": "Command+Shift+K"
       },
-      "description": "Toggle the ID POS command bar"
+      "description": "Toggle the Navigator command bar"
     }
   },
   "action": {
-    "default_title": "ID POS Navigator"
+    "default_title": "Universal Navigator",
+    "default_popup": "manage-routes.html"
   },
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://pos.idbi.pe/*"],
+      "matches": ["<all_urls>"],
       "js": ["content-script.js"],
       "run_at": "document_idle"
     }
@@ -33,9 +34,11 @@
     {
       "resources": [
         "data/navigation_tree.json",
-        "ranking.js"
+        "data/routes.csv",
+        "ranking.js",
+        "routes-loader.js"
       ],
-      "matches": ["https://pos.idbi.pe/*"]
+      "matches": ["<all_urls>"]
     }
   ]
 }

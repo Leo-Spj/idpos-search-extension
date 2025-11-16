@@ -1,0 +1,94 @@
+domain,id,module,title,url,tags,description,status
+pos.idbi.pe,route:orders,Ventas,Órdenes,/orders,"Ventas|Órdenes",Gestión centralizada de órdenes,active
+pos.idbi.pe,route:sales-product-recipes,Ventas,Recetas,/sales/product-recipes,"Ventas|Recetas",Recetas asociadas a productos,active
+pos.idbi.pe,route:quotations,Ventas,Cotizaciones,/quotations,"Ventas|Cotizaciones",Administración de cotizaciones comerciales,active
+pos.idbi.pe,route:requests-v2,Ventas,Solicitudes,/requests-v2,"Ventas|Solicitudes",Seguimiento de solicitudes vigentes,active
+pos.idbi.pe,route:coupons-v2,Ventas,Cupones,/coupons-v2,"Ventas|Cupones",Administración de cupones vigentes,active
+pos.idbi.pe,route:customers-v2,Ventas,Clientes,/customers-v2,"Ventas|Gestión de Clientes|Clientes",Alta y edición de clientes,active
+pos.idbi.pe,route:products-v3,Ventas,Productos,/products-v3,"Ventas|Gestión de Productos|Productos",Catálogo principal de productos,active
+pos.idbi.pe,route:maker-places,Ventas,Lugares de preparación,/maker-places,"Ventas|Gestión de Productos|Lugares de preparación",Administración de áreas de preparación,active
+pos.idbi.pe,route:products-availability,Ventas,Disponibilidad de productos,/products-availability,"Ventas|Gestión de Productos|Disponibilidad de productos",Configuración de stock disponible para la venta,active
+pos.idbi.pe,route:categories-v2,Ventas,Categorías,/categories-v2,"Ventas|Gestión de Productos|Categorías",Clasificación de productos,active
+pos.idbi.pe,route:sales-command,Ventas,Comandas Virtuales,/sales/command,"Ventas|Comandas Virtuales",Panel de comandas digitales,active
+pos.idbi.pe,route:advances-v2,Ventas,Anticipos,/advances-v2,"Ventas|Anticipos",Gestión de anticipos activos,active
+pos.idbi.pe,route:aggregators-linking-products,Ventas,Homologación de Productos,/aggregators/linking-products,"Ventas|Homologación de Productos",Sincronización de productos con agregadores,active
+pos.idbi.pe,route:kds-station,KDS,KDS,/kds/kds-station,"KDS|Estación KDS",Visor KDS para comandas activas,active
+pos.idbi.pe,route:dashboard-store,Dashboard,Dashboard de tienda,/dashboards/dashboard-store,"Dashboard|Dashboard de tienda",Métricas por tienda,active
+pos.idbi.pe,route:dashboard-sales,Dashboard,Dashboard de ventas,/dashboard,"Dashboard|Dashboard de ventas",Indicadores de ventas,active
+pos.idbi.pe,route:dashboard-operation,Dashboard,Dashboard Operación,/dashboards/analytics/operation,"Dashboard|Dashboard Operación",Monitoreo operativo,active
+pos.idbi.pe,route:dashboard-general,Dashboard,Dashboard General,/dashboards/business-groups-sales,"Dashboard|Dashboard General",Vista consolidada corporativa,active
+pos.idbi.pe,route:cashiers,Cajas,Cajas,/cashiers,"Cajas|Cajas",Control de cajas,active
+pos.idbi.pe,route:deposits,Cajas,Depósitos de dinero,/deposits,"Cajas|Depósitos de dinero",Registro de depósitos,active
+pos.idbi.pe,route:items-stock,Inventarios,Stock,/items/stock,"Inventarios|Gestión de Stock|Stock",Existencias por artículo,active
+pos.idbi.pe,route:initial-stock,Inventarios,Stock inicial,/initial-stock,"Inventarios|Gestión de Stock|Stock inicial",Carga inicial de inventario,active
+pos.idbi.pe,route:transfer-intra,Inventarios,Transferencia entre almacenes,/transfer-orders-v2/intra-store,"Inventarios|Movimientos de Inventario|Transferencia entre almacenes",Transferencias intra local,active
+pos.idbi.pe,route:transfer-inter,Inventarios,Transferencia entre locales,/transfer-orders/inter-store,"Inventarios|Movimientos de Inventario|Transferencia entre locales",Transferencias entre locales,active
+pos.idbi.pe,route:item-transactions-new,Inventarios,Salida de artículos V2,/inventory/item-transactions,"Inventarios|Movimientos de Inventario|Salida de artículos V2",Nuevo flujo de salidas,active
+pos.idbi.pe,route:item-transactions-v2,Inventarios,Salida de insumos,/item-transactions-v2,"Inventarios|Movimientos de Inventario|Salida de insumos",Gestión vigente de salidas de insumos,active
+pos.idbi.pe,route:inventory-adjustment,Inventarios,Ajuste de stock,/warehouses/inventory-adjustment,"Inventarios|Gestión de Stock|Ajuste de stock",Ajustes manuales de inventario,active
+pos.idbi.pe,route:kardex,Inventarios,Kardex,/inventory/kardex-v2,"Inventarios|Control y Seguimiento|Kardex",Movimientos detallados,active
+pos.idbi.pe,route:kardex-transactions,Inventarios,Cuadre de stock,/reports/kardex-transactions,"Inventarios|Gestión de Stock|Cuadre de stock",Kardex y ajustes,active
+pos.idbi.pe,route:items-v2,Inventarios,Artículos,/items-v2,"Inventarios|Infraestructura de Almacenes|Artículos",Configuración de artículos,active
+pos.idbi.pe,route:warehouses-v2,Inventarios,Almacenes,/warehouses-v2,"Inventarios|Infraestructura de Almacenes|Almacenes",Gestión de almacenes,active
+pos.idbi.pe,route:audit-stock,Inventarios,Auditoría de stock,/audit/stock,"Inventarios|Gestión de Stock|Auditoría de stock",Auditorías y conteos,active
+pos.idbi.pe,route:production-recipes,Producción,Receta base y porcionamiento,/production-v2/recipes,"Producción|Receta base y porcionamiento",Gestión de recetas de producción,active
+pos.idbi.pe,route:production-orders,Producción,Órdenes de transformación,/production/transformation-order,"Producción|Órdenes de transformación",Órdenes de transformación de productos,active
+pos.idbi.pe,route:purchase-documents,Compras,Órdenes de Compra,/purchase-documents,"Compras|Órdenes de Compra",Gestión de órdenes de compra,active
+pos.idbi.pe,route:payment-purchase,Compras,Cuadre de pagos,/reports/payment-purchase-documents,"Compras|Cuadre de pagos",Pagos aplicados a compras,active
+pos.idbi.pe,route:providers,Compras,Proveedores,/providers-management,"Compras|Proveedores",Administración de proveedores,active
+pos.idbi.pe,route:product-purchases,Compras,Reporte de compras de productos,/reports/product-purchases,"Compras|Reporte de compras de productos",Reporte de compras por producto,active
+pos.idbi.pe,route:purchase-requirements,Compras,Requerimientos de compra,/purchase-requirements,"Compras|Requerimientos de compra",Flujo de requerimientos,active
+pos.idbi.pe,route:service-documents,Servicios,Órdenes de servicio,/documents/service-documents,"Servicios|Órdenes de servicio",Gestión de órdenes de servicio,active
+pos.idbi.pe,route:services,Servicios,Servicios,/services,"Servicios|Servicios",Catálogo de servicios,active
+pos.idbi.pe,route:reports-orders,Reportes,Reporte de ventas,/reports/orders-v2,"Reportes|Financieros|Reporte de ventas",Reporte de ventas detallado,active
+pos.idbi.pe,route:reports-adjustment,Reportes,Cuadre de dinero,/reports/adjustment-v3,"Reportes|Financieros|Cuadre de dinero",Conciliación de caja,active
+pos.idbi.pe,route:reports-unpaid,Reportes,Ventas por cobrar,/reports/unpaid-orders,"Reportes|Financieros|Ventas por cobrar",Órdenes pendientes de cobro,active
+pos.idbi.pe,route:reports-tip,Reportes,Vendedores,/reports/tip-report,"Reportes|Personal|Vendedores",Reporte de desempeño de vendedores,active
+pos.idbi.pe,route:order-report,Reportes,Reportes de delivery,/order-report,"Reportes|Operaciones|Reportes de delivery",Indicadores de delivery,active
+pos.idbi.pe,route:reports-wincha,Reportes,Venta de productos,/reports/wincha-v3,"Reportes|Wincha|Productos e Inventario|Venta de productos",Reporte de ventas por producto,active
+pos.idbi.pe,route:reports-paloteo,Reportes,Reporte de consumo de insumos,/reports/paloteo-v2,"Reportes|Paloteo|Productos e Inventario|Consumo de insumos",Consumo de insumos,active
+pos.idbi.pe,route:reports-various,Reportes,Reportes varios,/reports/various,"Reportes|Consolidados|Reportes varios|Descuentos Cortesías Ventas Anulaciones y mermas|Ventas (bruta)",Colección de reportes adicionales,active
+pos.idbi.pe,route:reports-inventory,Reportes,Reporte de inventario,/reports/inventory,"Reportes|Inventario",Control y análisis de inventario,active
+pos.idbi.pe,route:reports-commissions,Reportes,Liquidación de comisiones,/reports/commissions,"Reportes|Comisiones",Cálculo de comisiones de venta,active
+pos.idbi.pe,route:reports-actions,Reportes,Historial de acciones,/reports/actions,"Reportes|Historial de acciones",Registro de acciones realizadas,active
+pos.idbi.pe,route:reports-discounts,Reportes,Reporte de descuentos y anulaciones,/reports/discounts,"Reportes|Descuentos y anulaciones",Seguimiento de descuentos y anulaciones,active
+pos.idbi.pe,route:reports-sales-summary,Reportes,Resumen de Ventas Acumulado,/reports/sales-conglomerate-summary,"Reportes|Consolidados|Resumen de Ventas Acumulado",Resumen consolidado,active
+pos.idbi.pe,route:importables,Reportes,Importables,/importables,"Reportes|Consolidados|Importables",Descarga de plantillas importables,active
+pos.idbi.pe,route:reports-sales-conglomerate,Reportes,Reporte Acumulado de Ventas por Vendedor,/reports/sales-conglomerate,"Reportes|Financieros|Ventas por vendedor",Consolidado por vendedor,active
+pos.idbi.pe,route:electronic-vouchers,Documentos contables,Comprobantes de venta,/accounting-documents/electronic-vouchers,"Documentos contables|Comprobantes electrónicos|Comprobantes de venta",Gestión de comprobantes electrónicos,active
+pos.idbi.pe,route:vouchers-consistency,Documentos contables,Consistencia de comprobantes,/accounting-documents/vouchers-consistency,"Documentos contables|Consistencia de comprobantes",Validación de comprobantes,active
+pos.idbi.pe,route:referral-guides,Documentos contables,Guías de remisión,/referral-guides,"Documentos contables|Guías de remisión",Emisión de guías,active
+pos.idbi.pe,route:referral-guides-internal,Documentos contables,Guías de remisión (Contabilidad),/accounting-documents/referral-guides,"Documentos contables|Guías de remisión|Contabilidad",Gestión de guías desde contabilidad,active
+pos.idbi.pe,route:purchase-vouchers,Documentos contables,Comprobantes de compra,/purchase-document-vouchers,"Documentos contables|Comprobantes de compra",Registro de comprobantes de compra,active
+pos.idbi.pe,route:reports-organization-sales,Sucursales,Reporte de ventas por organización,/reports/organization-sales,"Sucursales|Reporte de ventas por organización",Ventas por organización,active
+pos.idbi.pe,route:sales-upload-history,Sucursales,Historial de cargas de ventas,/sales-upload-history,"Sucursales|Historial de cargas de ventas",Historial de cargas de ventas,active
+pos.idbi.pe,route:printer,Configuraciones,Mi impresora,/printer,"Configuraciones|Dispositivos e Impresión|Mi impresora",Configuración de impresora,active
+pos.idbi.pe,route:venue,Configuraciones,Administrar local,/venue,"Configuraciones|Configuración de Local|Administrar local",Configuración general del local,active
+pos.idbi.pe,route:members-v2,Configuraciones,Equipo,/members-v2,"Configuraciones|Gestión de Equipo|Agregar|Equipo",Gestión del equipo,active
+pos.idbi.pe,route:config-business,Configuraciones,General,/config-business,"Configuraciones|Configuración de Negocio|General",Configuraciones generales del negocio,active
+pos.idbi.pe,route:config-business-v2,Configuraciones,General V2,/config-business-v2,"Configuraciones|Configuración de Negocio|General V2",Nueva versión de configuración general,active
+pos.idbi.pe,route:config-brands,Configuraciones,Marca,/config-brands,"Configuraciones|Configuración de Negocio|Marca",Gestión de marcas,active
+pos.idbi.pe,route:claims-book,Configuraciones,Libro de reclamaciones,/claims-book,"Configuraciones|Configuraciones Adicionales|Libro de reclamaciones",Gestión del libro de reclamaciones,active
+pos.idbi.pe,route:selectable-options,Configuraciones,Opciones seleccionables,/settings/selectable-options,"Configuraciones|Configuraciones Adicionales|Opciones seleccionables",Configuración de opciones,active
+pos.idbi.pe,route:devices,Configuraciones,Dispositivos,/devices,"Configuraciones|Dispositivos e Impresión|Dispositivos",Gestión de dispositivos,active
+pos.idbi.pe,route:config-local,Configuraciones,Configuración de local,/config-local,"Configuraciones|Configuración de Local|Configuración de local",Preferencias del local,active
+pos.idbi.pe,route:layout-management,Configuraciones,Gestión de layout,/layout-management,"Configuraciones|Configuración de Local|Gestión de layout",Diseño de layout,active
+pos.idbi.pe,route:config-ecommerce,Configuraciones,Ecommerce,/config-ecommerce,"Configuraciones|Configuración de Negocio|Ecommerce",Preferencias de ecommerce,active
+pos.idbi.pe,route:items,Deprecado,Artículos (Deprecado),/items,"Deprecado|Configuraciones|Artículos",Catálogo legado,legacy
+pos.idbi.pe,route:community,Deprecado,Inicio (Deprecado),/community,"Deprecado|Configuraciones|Inicio",Vista inicial antigua,legacy
+pos.idbi.pe,route:me-requests,Deprecado,Solicitudes (Deprecado),/me/requests,"Deprecado|Ventas|Solicitudes",Módulo legado,legacy
+pos.idbi.pe,route:documents-purchase-documents-v2,Deprecado,Órdenes de Compra (deprecado),/documents/purchase-documents-v2,"Deprecado|Compras|Órdenes de Compra V2",Versión anterior,legacy
+pos.idbi.pe,route:members,Deprecado,Equipo (Deprecado),/members,"Deprecado|Configuraciones|Equipo",Módulo legado,legacy
+pos.idbi.pe,route:advances,Deprecado,Anticipos (Deprecado),/advances,"Deprecado|Ventas|Anticipos",Versión anterior de anticipos,legacy
+pos.idbi.pe,route:customers,Deprecado,Clientes (Deprecado),/customers,"Deprecado|Ventas|Clientes",Gestión de clientes legado,legacy
+pos.idbi.pe,route:categories,Deprecado,Categorías (Deprecado),/categories,"Deprecado|Ventas|Categorías",Categorías legado,legacy
+pos.idbi.pe,route:recipes-products,Deprecado,Recetas (Deprecado),/recipes/recipes-products,"Deprecado|Ventas|Recetas",Recetas legado,legacy
+pos.idbi.pe,route:transfer-orders-intra-store,Deprecado,Transferencia entre almacenes (Deprecado),/transfer-orders/intra-store,"Deprecado|Inventarios|Transferencia entre almacenes",Versión anterior,legacy
+pos.idbi.pe,route:selectable-options-legacy,Deprecado,Opciones seleccionables (Deprecado),/selectable-options,"Deprecado|Configuraciones|Opciones seleccionables",Módulo legado,legacy
+pos.idbi.pe,route:coupons,Deprecado,Cupones (Deprecado),/coupons,"Deprecado|Ventas|Cupones",Versión anterior de cupones,legacy
+pos.idbi.pe,route:warehouses-transaction,Deprecado,Transferencia entre subalmacenes (a),/warehouses/transaction,"Deprecado|Inventarios|Transferencia entre subalmacenes",Movimiento legado,legacy
+pos.idbi.pe,route:recipes-items,Deprecado,Recetas base y porcionamiento (Deprecado),/recipes/recipes-items,"Deprecado|Producción|Recetas base y porcionamiento",Recetas legado,legacy
+pos.idbi.pe,route:transfer-orders-branch-offices,Deprecado,Transferencia entre locales (Deprecado),/transfer-orders/branch-offices,"Deprecado|Inventarios|Transferencia entre locales",Versión anterior,legacy
+pos.idbi.pe,route:reports-wincha-v2,Deprecado,Reporte de ventas de productos (Deprecado),/reports/wincha-v2,"Deprecado|Reportes|Venta de productos",Reporte legado,legacy
+pos.idbi.pe,route:documents-purchase-documents,Deprecado,Documentos (OC V1),/documents/purchase-documents,"Deprecado|Documentos contables|Documentos (OC V1)",Versión anterior de órdenes de compra,legacy
+pos.idbi.pe,route:warehouses,Deprecado,Almacenes V1,/warehouses,"Deprecado|Configuraciones|Almacenes V1",Versión anterior de almacenes,legacy

@@ -1,0 +1,15 @@
+domain,id,module,title,url,tags,description,status
+github.com,gh:repos,Repositories,My Repositories,/repositories,"Code|Repositories",List of all repositories,active
+github.com,gh:issues,Issues,My Issues,/issues,"Code|Issues",Open issues assigned to me,active
+github.com,gh:pulls,Pull Requests,My Pull Requests,/pulls,"Code|Pull Requests",Open pull requests,active
+github.com,gh:profile,Profile,My Profile,/settings/profile,"Settings|Profile",Edit profile settings,active
+github.com,gh:notifications,Notifications,Notifications,/notifications,"Activity|Notifications",View notifications,active
+stackoverflow.com,so:questions,Questions,My Questions,/users/current?tab=questions,"Profile|Questions",Questions I've asked,active
+stackoverflow.com,so:answers,Answers,My Answers,/users/current?tab=answers,"Profile|Answers",Answers I've provided,active
+stackoverflow.com,so:tags,Tags,My Tags,/users/current?tab=tags,"Profile|Tags",Tags I follow,active
+stackoverflow.com,so:reputation,Reputation,Reputation,/users/current?tab=reputation,"Profile|Reputation",Reputation history,active
+linkedin.com,li:feed,Feed,My Feed,/feed,"Home|Feed",LinkedIn feed,active
+linkedin.com,li:network,Network,My Network,/mynetwork,"Network|Connections",Network connections,active
+linkedin.com,li:jobs,Jobs,Job Search,/jobs,"Jobs|Search",Search for jobs,active
+linkedin.com,li:messaging,Messages,Messages,/messaging,"Communication|Messages",Direct messages,active
+linkedin.com,li:profile,Profile,My Profile,/in/me,"Profile|Personal",View my profile,active

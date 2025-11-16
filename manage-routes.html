@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gestión de Rutas - Navigator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 24px;
+      color: #1f2937;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      padding: 32px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .content {
+      padding: 32px;
+    }
+    .section {
+      margin-bottom: 32px;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 20px;
+      background: #667eea;
+      border-radius: 2px;
+    }
+    .description {
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .button-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    .btn-secondary {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .btn-secondary:hover {
+      background: #059669;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: #ffffff;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: -9999px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .stat-card {
+      background: #f9fafb;
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 4px;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .alert {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+    }
+    .alert.show {
+      display: flex;
+    }
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .alert-info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+    .domain-list {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 12px;
+    }
+    .domain-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #ffffff;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .domain-item:last-child {
+      margin-bottom: 0;
+    }
+    .domain-name {
+      font-weight: 600;
+      color: #374151;
+    }
+    .domain-count {
+      font-size: 13px;
+      color: #6b7280;
+      background: #f3f4f6;
+      padding: 4px 12px;
+      border-radius: 12px;
+    }
+    .csv-format {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 12px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+      color: #374151;
+      overflow-x: auto;
+    }
+    .csv-format code {
+      display: block;
+      white-space: pre;
+    }
+    .icon {
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🗺️ Gestión de Rutas Navigator</h1>
+      <p>Administra las rutas de navegación para múltiples dominios</p>
+    </div>
+    
+    <div class="content">
+      <div id="alertContainer"></div>
+
+      <div class="section">
+        <div class="section-title">📊 Estadísticas Actuales</div>
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-value" id="totalRoutes">0</div>
+            <div class="stat-label">Rutas Totales</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="totalDomains">0</div>
+            <div class="stat-label">Dominios Activos</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="activeRoutes">0</div>
+            <div class="stat-label">Rutas Activas</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">📥 Importar/Exportar</div>
+        <div class="description">
+          Descarga la plantilla CSV predeterminada o exporta tus rutas actuales. 
+          También puedes importar un archivo CSV con nuevas rutas.
+        </div>
+        <div class="button-group">
+          <button class="btn btn-secondary" id="downloadTemplateBtn">
+            <span>📄</span> Descargar Plantilla CSV
+          </button>
+          <button class="btn btn-primary" id="exportBtn">
+            <span>💾</span> Exportar Rutas Actuales
+          </button>
+          <div class="file-input-wrapper">
+            <button class="btn btn-primary">
+              <span>📤</span> Importar CSV
+            </button>
+            <input type="file" id="importInput" accept=".csv" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">🌐 Dominios Configurados</div>
+        <div class="description">
+          Lista de todos los dominios con rutas configuradas
+        </div>
+        <div class="domain-list" id="domainList">
+          <p style="color: #9ca3af; text-align: center;">Cargando...</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">🗑️ Gestión Avanzada</div>
+        <div class="description">
+          Elimina todas las rutas almacenadas para empezar de cero
+        </div>
+        <div class="button-group">
+          <button class="btn btn-danger" id="clearAllBtn">
+            <span>⚠️</span> Eliminar Todas las Rutas
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">📋 Formato CSV</div>
+        <div class="description">
+          El archivo CSV debe seguir este formato (pipe | como separador en tags):
+        </div>
+        <div class="csv-format">
+          <code>domain,id,module,title,url,tags,description,status
+pos.idbi.pe,route:orders,Ventas,Órdenes,/orders,"Ventas|Órdenes",Gestión de órdenes,active
+example.com,page:home,General,Inicio,/home,"General|Inicio",Página principal,active</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="manage-routes.js"></script>
+</body>
+</html>
