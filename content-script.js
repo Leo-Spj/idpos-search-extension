@@ -5,7 +5,7 @@
   const STORAGE_USAGE_PREFIX = "usage:";
   const STORAGE_SHORTCUT_KEY = "customShortcut";
   const STORAGE_ROUTES_KEY = "navigatorRoutes";
-  const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
+  const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
   const currentDomain = window.location.hostname;
   const RANKING_MODULE_URL = chrome.runtime.getURL("ranking.js");
@@ -861,7 +861,7 @@
     try {
       const currentDomain = normalizeDomain(window.location.hostname);
       const STORAGE_ROUTES_KEY = "navigatorRoutes";
-      const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
+      const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
       
       // Intentar cargar desde storage primero
       const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY);

@@ -38,7 +38,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 async function loadDefaultRoutes() {
   try {
-    const csvUrl = chrome.runtime.getURL("data/routes.csv");
+    const csvUrl = chrome.runtime.getURL("data/routes-example-social.csv");
     const response = await fetch(csvUrl);
     const csvText = await response.text();
     const routes = parseCSV(csvText);
