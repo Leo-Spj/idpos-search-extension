@@ -554,6 +554,64 @@
       color: #7f8c8d;
       margin: 0 12px;
     }
+    .import-mode-option:hover {
+      background: #e5e7eb;
+    }
+    
+    .import-mode-option input:checked {
+      accent-color: #667eea;
+    }
+    
+    .preview-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .preview-modal.show {
+      display: flex;
+    }
+    
+    .preview-content {
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 900px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    .change-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .change-new {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .change-update {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    
+    .change-delete {
+      background: #fee2e2;
+      color: #991b1b;
+    }
   </style>
 </head>
 <body>
@@ -682,7 +740,46 @@
         <!-- Importar -->
         <div class="table-container" style="padding: 24px;">
           <h3 style="margin-bottom: 16px;">📥 Importar Rutas desde CSV</h3>
-          <p style="color: #7f8c8d; margin-bottom: 16px;">Sube un archivo CSV para importar rutas. Las rutas existentes serán reemplazadas.</p>
+          <p style="color: #7f8c8d; margin-bottom: 16px;">Sube un archivo CSV y elige cómo importar las rutas.</p>
+          
+          <!-- Modo de importación -->
+          <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: #2c3e50;">Modo de Importación:</div>
+            <div style="display: grid; gap: 10px;">
+              
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 6px; transition: background 0.2s;" class="import-mode-option">
+                <input type="radio" name="importMode" value="MERGE" checked style="cursor: pointer;" />
+                <div>
+                  <div style="font-weight: 600;">🔀 Fusionar (Recomendado)</div>
+                  <div style="font-size: 13px; color: #7f8c8d;">Actualiza rutas existentes por ID y agrega nuevas. Mantiene las no presentes en CSV</div>
+                </div>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 6px; transition: background 0.2s;" class="import-mode-option">
+                <input type="radio" name="importMode" value="REPLACE_ALL" style="cursor: pointer;" />
+                <div>
+                  <div style="font-weight: 600;">🔄 Reemplazar Todo</div>
+                  <div style="font-size: 13px; color: #7f8c8d;">Elimina todas las rutas existentes y carga solo las del CSV</div>
+                </div>
+              </label>
+              
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 6px; transition: background 0.2s;" class="import-mode-option">
+                <input type="radio" name="importMode" value="ADD_ONLY" style="cursor: pointer;" />
+                <div>
+                  <div style="font-weight: 600;">➕ Solo Agregar</div>
+                  <div style="font-size: 13px; color: #7f8c8d;">Agrega solo rutas nuevas. No modifica rutas existentes</div>
+                </div>
+              </label>
+              
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 6px; transition: background 0.2s;" class="import-mode-option">
+                <input type="radio" name="importMode" value="REPLACE_DOMAIN" style="cursor: pointer;" />
+                <div>
+                  <div style="font-weight: 600;">🌐 Reemplazar por Dominio</div>
+                  <div style="font-size: 13px; color: #7f8c8d;">Reemplaza solo las rutas de los dominios presentes en el CSV</div>
+                </div>
+              </label>
+            </div>
+          </div>
           
           <div class="file-upload-area" id="dropZone">
             <div style="font-size: 48px; margin-bottom: 12px;">📁</div>
@@ -759,6 +856,57 @@
           <button type="submit" class="btn btn-primary" id="saveRouteBtn">Guardar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Preview de Importación -->
+  <div class="preview-modal" id="previewModal">
+    <div class="preview-content">
+      <div class="modal-header">
+        <h2>Vista Previa de Importación</h2>
+      </div>
+      
+      <div style="margin-bottom: 24px;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
+          <div style="text-align: center; padding: 16px; background: #d1fae5; border-radius: 8px;">
+            <div style="font-size: 32px; font-weight: 700; color: #065f46;" id="previewNewCount">0</div>
+            <div style="font-size: 14px; color: #065f46;">Nuevas</div>
+          </div>
+          <div style="text-align: center; padding: 16px; background: #fef3c7; border-radius: 8px;">
+            <div style="font-size: 32px; font-weight: 700; color: #92400e;" id="previewUpdateCount">0</div>
+            <div style="font-size: 14px; color: #92400e;">Actualizadas</div>
+          </div>
+          <div style="text-align: center; padding: 16px; background: #fee2e2; border-radius: 8px;">
+            <div style="font-size: 32px; font-weight: 700; color: #991b1b;" id="previewDeleteCount">0</div>
+            <div style="font-size: 14px; color: #991b1b;">Eliminadas</div>
+          </div>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+          <div style="font-weight: 600; margin-bottom: 8px;">Modo: <span id="previewMode"></span></div>
+          <div style="font-size: 14px; color: #7f8c8d;" id="previewDescription"></div>
+        </div>
+      </div>
+      
+      <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+        <table style="width: 100%; font-size: 14px;">
+          <thead style="position: sticky; top: 0; background: white; border-bottom: 2px solid #e1e8ed;">
+            <tr>
+              <th style="padding: 12px; text-align: left;">Estado</th>
+              <th style="padding: 12px; text-align: left;">Dominio</th>
+              <th style="padding: 12px; text-align: left;">Título</th>
+              <th style="padding: 12px; text-align: left;">Módulo</th>
+            </tr>
+          </thead>
+          <tbody id="previewTableBody">
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="cancelPreviewBtn">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="confirmImportBtn">Confirmar Importación</button>
+      </div>
     </div>
   </div>
 

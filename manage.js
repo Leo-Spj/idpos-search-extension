@@ -7,6 +7,8 @@ let currentPage = 1;
 const rowsPerPage = 50;
 let isEditMode = false;
 let editingRouteId = null;
+let pendingImportRoutes = [];
+let importMode = 'REPLACE_ALL';
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
@@ -341,6 +343,17 @@ function setupEventListeners() {
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
   document.getElementById('routeForm').addEventListener('submit', saveRoute);
 
+  // Preview modal
+  document.getElementById('cancelPreviewBtn').addEventListener('click', closePreviewModal);
+  document.getElementById('confirmImportBtn').addEventListener('click', confirmImport);
+
+  // Modo de importación
+  document.querySelectorAll('input[name="importMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      importMode = e.target.value;
+    });
+  });
+
   // Importar/Exportar
   document.getElementById('exportAllBtn').addEventListener('click', exportAll);
   document.getElementById('downloadTemplateBtn').addEventListener('click', downloadTemplate);
@@ -577,24 +590,215 @@ async function handleFileUpload(file) {
       return;
     }
 
-    if (!confirm(`¿Importar ${routes.length} rutas? Esto reemplazará todas las rutas actuales.`)) {
-      return;
-    }
-
-    allRoutes = routes;
-    selectedRoutes.clear();
+    // Guardar rutas pendientes y mostrar preview
+    pendingImportRoutes = routes;
+    showImportPreview(routes);
     
-    await saveRoutes();
-    updateStats();
-    applyFilters();
-    renderTable();
-    populateDomainFilters();
-    renderDomainsList();
-    
-    showAlert(`${routes.length} rutas importadas correctamente`, 'success');
   } catch (error) {
-    showAlert('Error al importar archivo: ' + error.message, 'error');
+    showAlert('Error al leer archivo: ' + error.message, 'error');
   }
+}
+
+// Mostrar preview de importación
+function showImportPreview(newRoutes) {
+  const changes = calculateImportChanges(newRoutes);
+  
+  // Actualizar contadores
+  document.getElementById('previewNewCount').textContent = changes.new.length;
+  document.getElementById('previewUpdateCount').textContent = changes.updated.length;
+  document.getElementById('previewDeleteCount').textContent = changes.deleted.length;
+  
+  // Actualizar descripción del modo
+  const modeDescriptions = {
+    'REPLACE_ALL': {
+      title: '🔄 Reemplazar Todo',
+      description: 'Se eliminarán todas las rutas existentes y se cargarán solo las del CSV'
+    },
+    'MERGE': {
+      title: '🔀 Fusionar',
+      description: 'Se actualizarán las rutas existentes por ID y se agregarán las nuevas. Las no presentes en el CSV se mantendrán'
+    },
+    'ADD_ONLY': {
+      title: '➕ Solo Agregar',
+      description: 'Solo se agregarán las rutas nuevas. Las existentes no serán modificadas'
+    },
+    'REPLACE_DOMAIN': {
+      title: '🌐 Reemplazar por Dominio',
+      description: 'Se reemplazarán solo las rutas de los dominios presentes en el CSV. Otros dominios no se verán afectados'
+    }
+  };
+  
+  const modeInfo = modeDescriptions[importMode];
+  document.getElementById('previewMode').textContent = modeInfo.title;
+  document.getElementById('previewDescription').textContent = modeInfo.description;
+  
+  // Renderizar tabla de cambios
+  const tbody = document.getElementById('previewTableBody');
+  tbody.innerHTML = '';
+  
+  // Nuevas
+  changes.new.forEach(route => {
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="change-badge change-new">NUEVA</span></td>
+        <td>${route.domain}</td>
+        <td>${route.title}</td>
+        <td>${route.module}</td>
+      </tr>
+    `;
+  });
+  
+  // Actualizadas
+  changes.updated.forEach(route => {
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="change-badge change-update">ACTUALIZAR</span></td>
+        <td>${route.domain}</td>
+        <td>${route.title}</td>
+        <td>${route.module}</td>
+      </tr>
+    `;
+  });
+  
+  // Eliminadas
+  changes.deleted.forEach(route => {
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="change-badge change-delete">ELIMINAR</span></td>
+        <td>${route.domain}</td>
+        <td>${route.title}</td>
+        <td>${route.module}</td>
+      </tr>
+    `;
+  });
+  
+  // Mostrar modal
+  document.getElementById('previewModal').classList.add('show');
+}
+
+// Calcular cambios de importación
+function calculateImportChanges(newRoutes) {
+  const changes = {
+    new: [],
+    updated: [],
+    deleted: []
+  };
+  
+  const existingById = new Map(allRoutes.map(r => [r.id, r]));
+  const newById = new Map(newRoutes.map(r => [r.id, r]));
+  
+  switch (importMode) {
+    case 'REPLACE_ALL':
+      // Todo lo del CSV es "nuevo" (técnicamente reemplaza todo)
+      changes.new = newRoutes;
+      changes.deleted = allRoutes;
+      break;
+      
+    case 'MERGE':
+      // Nuevas: las que no existen
+      // Actualizadas: las que existen y están en el CSV
+      // Ninguna se elimina
+      newRoutes.forEach(route => {
+        if (existingById.has(route.id)) {
+          changes.updated.push(route);
+        } else {
+          changes.new.push(route);
+        }
+      });
+      break;
+      
+    case 'ADD_ONLY':
+      // Solo nuevas, nada se actualiza ni elimina
+      newRoutes.forEach(route => {
+        if (!existingById.has(route.id)) {
+          changes.new.push(route);
+        }
+      });
+      break;
+      
+    case 'REPLACE_DOMAIN':
+      // Obtener dominios del CSV
+      const csvDomains = new Set(newRoutes.map(r => r.domain));
+      
+      // Nuevas y actualizadas en esos dominios
+      newRoutes.forEach(route => {
+        if (existingById.has(route.id)) {
+          changes.updated.push(route);
+        } else {
+          changes.new.push(route);
+        }
+      });
+      
+      // Eliminadas: rutas existentes de esos dominios que no están en el CSV
+      allRoutes.forEach(route => {
+        if (csvDomains.has(route.domain) && !newById.has(route.id)) {
+          changes.deleted.push(route);
+        }
+      });
+      break;
+  }
+  
+  return changes;
+}
+
+// Confirmar importación
+async function confirmImport() {
+  const newRoutes = pendingImportRoutes;
+  let finalRoutes = [];
+  
+  switch (importMode) {
+    case 'REPLACE_ALL':
+      finalRoutes = newRoutes;
+      break;
+      
+    case 'MERGE':
+      // Crear mapa de existentes
+      const existingById = new Map(allRoutes.map(r => [r.id, r]));
+      
+      // Actualizar o agregar
+      newRoutes.forEach(route => {
+        existingById.set(route.id, route);
+      });
+      
+      finalRoutes = Array.from(existingById.values());
+      break;
+      
+    case 'ADD_ONLY':
+      const existingIds = new Set(allRoutes.map(r => r.id));
+      const onlyNew = newRoutes.filter(r => !existingIds.has(r.id));
+      finalRoutes = [...allRoutes, ...onlyNew];
+      break;
+      
+    case 'REPLACE_DOMAIN':
+      const csvDomains = new Set(newRoutes.map(r => r.domain));
+      const csvRoutesById = new Map(newRoutes.map(r => [r.id, r]));
+      
+      // Mantener rutas de otros dominios
+      finalRoutes = allRoutes.filter(r => !csvDomains.has(r.domain));
+      
+      // Agregar todas las del CSV
+      finalRoutes.push(...newRoutes);
+      break;
+  }
+  
+  allRoutes = finalRoutes;
+  selectedRoutes.clear();
+  
+  await saveRoutes();
+  updateStats();
+  applyFilters();
+  renderTable();
+  populateDomainFilters();
+  renderDomainsList();
+  
+  closePreviewModal();
+  showAlert(`Importación completada: ${newRoutes.length} rutas procesadas`, 'success');
+}
+
+// Cerrar modal de preview
+function closePreviewModal() {
+  document.getElementById('previewModal').classList.remove('show');
+  pendingImportRoutes = [];
 }
 
 // Parsear CSV
