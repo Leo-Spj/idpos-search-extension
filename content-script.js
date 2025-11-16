@@ -537,6 +537,12 @@
   }
 
   function openOverlay() {
+    // No abrir si no hay rutas configuradas para este dominio
+    if (state.staticNodes.length === 0) {
+      console.log('Navigator: No hay rutas configuradas para este dominio. Configura rutas en la página de opciones.');
+      return;
+    }
+    
     ensureOverlay();
     if (!state.container || state.open) return;
     state.open = true;
@@ -853,7 +859,7 @@
   async function loadStaticNavigation() {
     state.loadingStatic = true;
     try {
-      const currentDomain = window.location.hostname;
+      const currentDomain = normalizeDomain(window.location.hostname);
       const STORAGE_ROUTES_KEY = "navigatorRoutes";
       const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
       
@@ -869,8 +875,16 @@
         await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes });
       }
       
-      // Filtrar por dominio actual
-      const domainRoutes = routes.filter(route => route.domain === currentDomain);
+      // Filtrar por dominio actual (normalizando ambos para comparación)
+      const domainRoutes = routes.filter(route => normalizeDomain(route.domain) === currentDomain);
+      
+      // Si no hay rutas para este dominio, no inicializar nada
+      if (domainRoutes.length === 0) {
+        console.log(`Navigator: No hay rutas configuradas para ${currentDomain}`);
+        state.staticNodes = [];
+        state.loadingStatic = false;
+        return;
+      }
       
       // Convertir a formato de nodos
       state.staticNodes = domainRoutes.map(route => ({
@@ -1011,7 +1025,16 @@
     return `${location.origin}/${url}`;
   }
 
+  function normalizeDomain(domain) {
+    if (!domain) return "";
+    // Eliminar www. al principio para comparación
+    return domain.toLowerCase().replace(/^www\./, "");
+  }
+
   function scheduleScan(delay) {
+    // NUNCA escanear si hay rutas estáticas configuradas
+    // Solo escanear DOM cuando NO hay rutas estáticas
+    if (state.staticNodes.length > 0) return;
     if (state.scanning) return;
     state.scanning = true;
     window.setTimeout(async () => {
@@ -1140,31 +1163,13 @@
   function mergeNodes(domNodes) {
     const usage = state.usageMap;
     const byId = new Map();
-    const byUrl = new Map();
-    const combined = [...state.staticNodes, ...domNodes];
+    
+    // Si hay rutas estáticas, SOLO usar esas (ignorar DOM completamente)
+    const nodesToUse = state.staticNodes.length > 0 ? state.staticNodes : domNodes;
 
-    for (const node of combined) {
+    for (const node of nodesToUse) {
       const existingUsage = usage.get(node.id) || 0;
       node.usage = existingUsage;
-      
-      // Deduplicar por URL si existe
-      if (node.url) {
-        const normalizedUrl = node.url.toLowerCase().trim();
-        const existing = byUrl.get(normalizedUrl);
-        
-        if (existing) {
-          // Si ya existe un nodo con la misma URL, priorizar el estático
-          if (existing.source === "static" && node.source === "dom") {
-            continue; // Saltar el nodo del DOM
-          } else if (node.source === "static" && existing.source === "dom") {
-            // Reemplazar el nodo del DOM con el estático
-            byId.delete(existing.id);
-          }
-        }
-        
-        byUrl.set(normalizedUrl, node);
-      }
-      
       byId.set(node.id, node);
     }
 

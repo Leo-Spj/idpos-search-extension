@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Universal Navigator",
   "description": "Floating command bar to accelerate navigation on any website with custom routes.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "permissions": ["activeTab", "storage", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -19,10 +19,9 @@
     }
   },
   "action": {
-    "default_title": "Universal Navigator",
-    "default_popup": "manage-routes.html"
+    "default_title": "Universal Navigator - Gestión de Rutas"
   },
-  "options_page": "options.html",
+  "options_page": "manage.html",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
