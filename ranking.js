@@ -284,7 +284,7 @@ function scoreNode(tokens, node, frequencyData, now) {
 }
 
 function mapNodeToResult(node) {
-  const hierarchy = node.tag && node.tag.length ? node.tag.join(" > ") : node.title;
+  const hierarchy = node.tag && node.tag.length ? node.tag.join(" · ") : node.title;
   return {
     id: node.id,
     title: node.title,

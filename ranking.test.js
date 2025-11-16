@@ -29,7 +29,7 @@ function makeNode({
     module,
     description,
     tag,
-    pathLabel: tag.join(' > '),
+    pathLabel: tag.join(' · '),
     usage,
     source,
     depth: computedDepth,

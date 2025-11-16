@@ -56,7 +56,7 @@
 
   function defaultMapNodeToResult(node) {
     const source = node || {};
-    const hierarchy = source.tag && source.tag.length ? source.tag.join(" > ") : source.title;
+    const hierarchy = source.tag && source.tag.length ? source.tag.join(" · ") : source.title;
     return {
       id: source.id,
       title: source.title,
@@ -803,7 +803,7 @@
           if (idx > 0) {
             const separator = document.createElement("span");
             separator.className = "path-separator";
-            separator.textContent = "›";
+            separator.textContent = "·";
             pathTags.appendChild(separator);
           }
           
@@ -881,7 +881,7 @@
       titleLower: removeAccents(title.toLowerCase()),
       tag,
       tagLower: removeAccents(tag.join(" ").toLowerCase()),
-      pathLabel: raw.pathLabel || tag.join(" > "),
+      pathLabel: raw.pathLabel || tag.join(" · "),
       url: absoluteUrl(raw.url),
       description: raw.description || "",
       module: raw.module || "",
@@ -990,7 +990,7 @@
       titleLower: removeAccents(text.toLowerCase()),
       tag,
       tagLower: removeAccents(tag.join(" ").toLowerCase()),
-      pathLabel: tag.join(" > "),
+      pathLabel: tag.join(" · "),
       url,
       description,
       module,
