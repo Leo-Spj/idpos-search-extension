@@ -865,7 +865,10 @@
       const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
       
       // Intentar cargar desde storage primero
-      const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY);
+      const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY).catch(err => {
+        if (err.message && err.message.includes('Extension context invalidated')) return {};
+        throw err;
+      });
       let routes = stored[STORAGE_ROUTES_KEY] || [];
       
       // Si no hay rutas en storage, cargar desde CSV por defecto
@@ -873,7 +876,10 @@
         const response = await fetch(CSV_DATA_URL);
         const csvText = await response.text();
         routes = parseRoutesCSV(csvText);
-        await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes });
+        await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes }).catch(err => {
+          if (err.message && err.message.includes('Extension context invalidated')) return;
+          throw err;
+        });
       }
       
       // Filtrar por dominio actual (normalizando ambos para comparación)
@@ -1258,13 +1264,21 @@
     try {
       await chrome.storage.local.set(payload);
     } catch (error) {
-      console.warn("IDPOS Navigator: failed to persist usage batch", error);
+      // Ignorar silenciosamente errores de contexto inválido cuando la extensión se recarga
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        return;
+      }
+      // Solo registrar otros tipos de errores
+      console.warn("Navigator: failed to persist usage batch", error);
     }
   }
 
   async function loadUsageCounts() {
     try {
-      const keys = await chrome.storage.local.get(null);
+      const keys = await chrome.storage.local.get(null).catch(err => {
+        if (err.message && err.message.includes('Extension context invalidated')) return {};
+        throw err;
+      });
       Object.entries(keys).forEach(([key, value]) => {
         if (key.startsWith(STORAGE_USAGE_PREFIX)) {
           state.usageMap.set(key.replace(STORAGE_USAGE_PREFIX, ""), Number(value) || 0);
@@ -1358,7 +1372,10 @@
 
   async function loadShortcutPreference() {
     try {
-      const store = await chrome.storage.local.get(STORAGE_SHORTCUT_KEY);
+      const store = await chrome.storage.local.get(STORAGE_SHORTCUT_KEY).catch(err => {
+        if (err.message && err.message.includes('Extension context invalidated')) return {};
+        throw err;
+      });
       state.shortcut = normalizeShortcut(store[STORAGE_SHORTCUT_KEY] || DEFAULT_SHORTCUT);
     } catch (error) {
       console.warn("IDPOS Navigator: shortcut preference unavailable", error);
