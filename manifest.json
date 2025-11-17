@@ -3,6 +3,11 @@
   "name": "Universal Navigator",
   "description": "Floating command bar to accelerate navigation on any website with custom routes.",
   "version": "0.3.0",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": ["activeTab", "storage", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -15,10 +20,15 @@
         "default": "Ctrl+Shift+K",
         "mac": "Command+Shift+K"
       },
-      "description": "Toggle the Navigator command bar"
+      "description": "Abrir/cerrar el navegador universal"
     }
   },
   "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
     "default_title": "Universal Navigator - Gestión de Rutas"
   },
   "options_page": "manage.html",
@@ -32,8 +42,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "data/navigation_tree.json",
-        "data/routes.csv",
+        "data/*.csv",
         "ranking.js",
         "routes-loader.js"
       ],
