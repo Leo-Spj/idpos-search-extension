@@ -788,15 +788,8 @@
       const titleSpan = document.createElement("div");
       titleSpan.className = "result-title";
       
-      // Si el título es igual al módulo, usar el pathLabel completo
-      const normalizedTitle = (item.title || "").trim().toLowerCase();
-      const normalizedModule = (item.module || "").trim().toLowerCase();
-      
-      if (normalizedTitle === normalizedModule && item.pathLabel) {
-        titleSpan.textContent = item.pathLabel;
-      } else {
-        titleSpan.textContent = item.title;
-      }
+      // Siempre mostrar solo el título, sin duplicación
+      titleSpan.textContent = item.title;
       
       titleWrapper.appendChild(titleSpan);
 
@@ -805,8 +798,15 @@
         const pathTags = document.createElement("div");
         pathTags.className = "result-path-tags";
         
-        // Mostrar el path completo excepto el último elemento (que suele ser el título)
-        const pathToShow = item.tag.slice(0, -1);
+        // Verificar si el último elemento del tag es igual al título
+        const normalizedTitle = (item.title || "").trim().toLowerCase();
+        const lastTag = item.tag[item.tag.length - 1];
+        const normalizedLastTag = (lastTag || "").trim().toLowerCase();
+        
+        // Si el último tag es igual al título, excluirlo del pathLabel
+        const pathToShow = normalizedLastTag === normalizedTitle 
+          ? item.tag.slice(0, -1) 
+          : item.tag.slice(0, -1);
         
         pathToShow.forEach((pathPart, idx) => {
           if (idx > 0) {
