@@ -11,7 +11,7 @@
   "permissions": ["activeTab", "storage", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "scripts/background.js",
     "type": "module"
   },
   "commands": {
@@ -24,7 +24,7 @@
     }
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "pages/popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
@@ -32,11 +32,11 @@
     },
     "default_title": "Universal Navigator"
   },
-  "options_page": "manage.html",
+  "options_page": "pages/manage.html",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content-script.js"],
+      "js": ["scripts/content-script.js"],
       "run_at": "document_idle"
     }
   ],
@@ -44,8 +44,8 @@
     {
       "resources": [
         "data/*.csv",
-        "ranking.js",
-        "routes-loader.js"
+        "scripts/ranking.js",
+        "scripts/routes-loader.js"
       ],
       "matches": ["<all_urls>"]
     }

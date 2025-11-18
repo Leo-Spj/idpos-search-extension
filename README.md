@@ -101,23 +101,6 @@ pos.idbi.pe,route:orders,Ventas,Órdenes,/orders,"Ventas|Órdenes",Gestión de �
 4. Importa tu archivo CSV
 5. Navega al sitio web y activa la barra de comandos
 
-## 🏗️ Estructura del Proyecto
-
-```
-idpos-search-extension/
-├── manifest.json              # Configuración de la extensión
-├── background.js              # Service worker para eventos
-├── content-script.js          # Script principal inyectado
-├── routes-loader.js           # Cargador de rutas desde CSV
-├── ranking.js                 # Motor de ranking y búsqueda
-├── options.html               # Página de opciones
-├── options.js                 # Lógica de opciones
-├── manage-routes.html         # Panel de gestión de rutas
-├── manage-routes.js           # Lógica de gestión
-└── data/
-    ├── routes.csv             # Rutas predeterminadas
-    └── navigation_tree.json   # Datos legacy (deprecado)
-```
 
 ## 🔧 Desarrollo
 

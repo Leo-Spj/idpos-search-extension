@@ -1,0 +1,38 @@
+# Archivos de documentación (no necesarios para publicación)
+docs/CORRECCIONES.md
+docs/PRUEBA.md
+docs/TESTING.md
+docs/INSTALL.md
+
+# Node modules
+node_modules/
+
+# Archivos de testing
+*.test.js
+coverage/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+*.tmp
+*.bak
+*~
+
+# Archivos antiguos/backup
+*-old.*
+*.old
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos específicos del sistema operativo
+*.DS_Store

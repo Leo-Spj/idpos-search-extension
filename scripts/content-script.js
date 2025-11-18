@@ -8,7 +8,7 @@
   const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
   const DEFAULT_SHORTCUT = { meta: false, ctrl: true, shift: true, alt: false, key: "k" };
   const currentDomain = window.location.hostname;
-  const RANKING_MODULE_URL = chrome.runtime.getURL("ranking.js");
+  const RANKING_MODULE_URL = chrome.runtime.getURL("scripts/ranking.js");
   const USAGE_FLUSH_INTERVAL = 5000;
   const STATIC_CACHE_CATEGORY = "all";
   const CACHE_ELIGIBLE_SOURCES = new Set(["static"]);
