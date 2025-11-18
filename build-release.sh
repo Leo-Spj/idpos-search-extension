@@ -28,7 +28,6 @@ zip -r "$OUTPUT_DIR/$ZIP_NAME" \
     pages/ \
     scripts/ \
     icons/ \
-    data/routes.csv \
     data/routes-example-social.csv \
     -x "*.DS_Store" \
     -x "*~" \
@@ -37,6 +36,9 @@ zip -r "$OUTPUT_DIR/$ZIP_NAME" \
     -x "*-old.*" \
     -x "*.test.js" \
     -x "docs/*" \
+    -x "data/routes.csv" \
+    -x "*.git*" \
+    -x ".git/*" \
     > /dev/null
 
 # Verificar que el ZIP se creó correctamente
