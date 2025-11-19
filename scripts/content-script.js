@@ -55,6 +55,7 @@
   let mapNodeToResult = defaultMapNodeToResult;
   let buildCacheKey = defaultBuildCacheKey;
   let removeAccents = defaultRemoveAccents;
+  let removeAccentsGlobal = defaultRemoveAccents; // Fallback global
 
   function defaultMapNodeToResult(node) {
     const source = node || {};
@@ -115,7 +116,7 @@
         pointer-events: auto;
         transform: translateX(-50%) translateY(0);
       }
-      .command-input {
+            .command-input {
         width: 100%;
         padding: 12px 14px;
         border-radius: 9px;
@@ -127,12 +128,36 @@
         outline: none;
         box-sizing: border-box;
         transition: padding 180ms ease;
+        position: relative;
+      }
+      .input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .input-overlay {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-size: 15px;
+        line-height: 1.4;
+        color: transparent;
+        white-space: pre;
+      }
+      .input-overlay .filter-prefix {
+        color: rgba(34, 197, 94, 1);
+        text-shadow: 0 0 8px rgba(34, 197, 94, 0.8),
+                     0 0 12px rgba(34, 197, 94, 0.6),
+                     0 0 16px rgba(34, 197, 94, 0.4);
+        font-weight: 600;
       }
       .command-input.has-category-filter {
-        padding-left: 160px;
+        padding-left: 110px;
       }
       .command-input.has-shift-indicator {
-        padding-right: 180px;
+        padding-right: 160px;
       }
       .command-input::placeholder {
         color: rgba(255, 255, 255, 0.45);
@@ -314,42 +339,44 @@
       }
       .shift-indicator {
         position: absolute;
-        top: 24px;
-        right: 24px;
+        top: 50%;
+        right: 14px;
         transform: translateY(-50%);
         background: rgba(59, 130, 246, 0.9);
         color: #ffffff;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
         font-weight: 600;
         display: none;
         align-items: center;
-        gap: 6px;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        gap: 4px;
+        box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
         animation: slideIn 0.2s ease;
         pointer-events: none;
+        z-index: 1;
       }
       .shift-indicator.active {
         display: flex;
       }
       .category-filter {
         position: absolute;
-        top: 24px;
-        left: 24px;
+        top: 50%;
+        left: 14px;
         transform: translateY(-50%);
         background: rgba(34, 197, 94, 0.9);
         color: #ffffff;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
         font-weight: 600;
         display: none;
         align-items: center;
-        gap: 6px;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+        gap: 4px;
+        box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
         animation: slideIn 0.2s ease;
         pointer-events: none;
+        z-index: 1;
       }
       .category-filter.active {
         display: flex;
@@ -385,14 +412,17 @@
     <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar">
       <div style="position: relative;">
         <div class="category-filter" id="category-filter">
-          <span id="category-name"></span>
+          <span id="category-name">Filtrando</span>
           <span class="close-btn" id="clear-category">×</span>
         </div>
         <div class="shift-indicator" id="shift-indicator">
           <span>⇧</span>
           <span>Abrir en nueva pestaña</span>
         </div>
-        <input class="command-input" type="text" placeholder="Buscar módulos, rutas o acciones" autocomplete="off" spellcheck="false" aria-label="Buscar" />
+        <div class="input-wrapper">
+          <div class="input-overlay" id="input-overlay"></div>
+          <input class="command-input" type="text" placeholder="Buscar módulos, rutas o acciones" autocomplete="off" spellcheck="false" aria-label="Buscar" />
+        </div>
       </div>
       <ul class="results" role="listbox"></ul>
       <div class="empty-state" hidden>No se encontraron coincidencias.</div>
@@ -429,12 +459,20 @@
   init();
 
   async function init() {
-    if (state.initialized) return;
+    const utilsUrl = chrome.runtime.getURL("scripts/utils.js");
+    const { removeAccents, CSV_PATH, STORAGE_ROUTES_KEY } = await import(utilsUrl);
+    
+    // Reasignar removeAccents globalmente para este scope
+    removeAccentsGlobal = removeAccents;
+
+    const routesLoaderUrl = chrome.runtime.getURL("scripts/routes-loader.js");
+    const { loadRoutesForDomain } = await import(routesLoaderUrl);
+
     state.initialized = true;
     await Promise.all([
       ensureRankingEngine(),
       loadShortcutPreference(),
-      loadStaticNavigation(),
+      loadStaticNavigation(loadRoutesForDomain, STORAGE_ROUTES_KEY),
       loadUsageCounts()
     ]);
     ensureOverlay();
@@ -460,7 +498,8 @@
       getDefaultResults = (nodes, context) => state.rankingEngine.getDefaultResults(nodes, context);
       mapNodeToResult = state.rankingEngine.mapNodeToResult;
       buildCacheKey = state.rankingEngine.buildCacheKey;
-      removeAccents = state.rankingEngine.removeAccents;
+      // Usar la versión del engine si está disponible, o la global
+      removeAccents = state.rankingEngine.removeAccents || removeAccentsGlobal;
 
       return state.rankingEngine;
     } catch (error) {
@@ -499,6 +538,7 @@
     const categoryFilter = shadow.querySelector("#category-filter");
     const categoryName = shadow.querySelector("#category-name");
     const clearCategory = shadow.querySelector("#clear-category");
+    const inputOverlay = shadow.querySelector("#input-overlay");
 
     state.host = host;
     state.shadow = shadow;
@@ -510,6 +550,7 @@
     state.shiftIndicator = shiftIndicator;
     state.categoryFilter = categoryFilter;
     state.categoryName = categoryName;
+    state.inputOverlay = inputOverlay;
 
     input.addEventListener("input", handleQueryInput);
     input.addEventListener("keydown", handleInputKeys);
@@ -578,17 +619,22 @@
   }
 
   function handleQueryInput(event) {
-    const query = event.target.value.trim();
-    if (!query) {
+    const query = event.target.value;
+    const trimmedQuery = query.trim();
+    
+    // Actualizar overlay con efecto neón
+    updateInputOverlay(query);
+    
+    if (!trimmedQuery) {
       clearCategoryIndicator();
-  renderResults(getDefaultResults(state.nodes));
+      renderResults(getDefaultResults(state.nodes));
       return;
     }
     
     // Detectar búsqueda por categoría con formato "módulo: query"
-    const categoryMatch = query.match(/^([a-záéíóúñ]+):\s*(.*)$/i);
+    const categoryMatch = trimmedQuery.match(/^([a-záéíóúñ]+):\s*(.*)$/i);
     let filtered = state.nodes;
-    let searchQuery = query;
+    let searchQuery = trimmedQuery;
     
     if (categoryMatch) {
       const [, category, rest] = categoryMatch;
@@ -738,8 +784,7 @@
   }
 
   function updateCategoryIndicator(category) {
-    if (!state.categoryFilter || !state.categoryName || !state.input) return;
-    state.categoryName.textContent = `Filtrando: ${category}`;
+    if (!state.categoryFilter || !state.input) return;
     state.categoryFilter.classList.add("active");
     state.input.classList.add("has-category-filter");
   }
@@ -749,6 +794,28 @@
     state.categoryFilter.classList.remove("active");
     state.input.classList.remove("has-category-filter");
     state.activeCategory = null;
+    if (state.inputOverlay) {
+      state.inputOverlay.innerHTML = "";
+    }
+  }
+
+  function updateInputOverlay(query) {
+    if (!state.inputOverlay) return;
+    
+    const categoryMatch = query.match(/^([a-záéíóúñ]+:)/i);
+    if (categoryMatch) {
+      const prefix = categoryMatch[1];
+      const rest = query.substring(prefix.length);
+      state.inputOverlay.innerHTML = `<span class="filter-prefix">${escapeHtml(prefix)}</span>${escapeHtml(rest)}`;
+    } else {
+      state.inputOverlay.innerHTML = "";
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   function renderResults(results) {
@@ -857,60 +924,23 @@
   }
 
 
-  async function loadStaticNavigation() {
+  async function loadStaticNavigation(loadRoutesForDomain, STORAGE_ROUTES_KEY) {
     state.loadingStatic = true;
     try {
       const currentDomain = normalizeDomain(window.location.hostname);
-      const STORAGE_ROUTES_KEY = "navigatorRoutes";
-      const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
       
-      // Intentar cargar desde storage primero
-      const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY).catch(err => {
-        if (err.message && err.message.includes('Extension context invalidated')) return {};
-        throw err;
-      });
-      let routes = stored[STORAGE_ROUTES_KEY] || [];
-      
-      // Si no hay rutas en storage, cargar desde CSV por defecto
-      if (routes.length === 0) {
-        const response = await fetch(CSV_DATA_URL);
-        const csvText = await response.text();
-        routes = parseRoutesCSV(csvText);
-        await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes }).catch(err => {
-          if (err.message && err.message.includes('Extension context invalidated')) return;
-          throw err;
-        });
-      }
-      
-      // Filtrar por dominio actual (normalizando ambos para comparación)
-      const domainRoutes = routes.filter(route => normalizeDomain(route.domain) === currentDomain);
+      // Usar el loader modularizado
+      const nodes = await loadRoutesForDomain(currentDomain, state.usageMap);
       
       // Si no hay rutas para este dominio, no inicializar nada
-      if (domainRoutes.length === 0) {
+      if (nodes.length === 0) {
         console.log(`Navigator: No hay rutas configuradas para ${currentDomain}`);
         state.staticNodes = [];
         state.loadingStatic = false;
         return;
       }
       
-      // Convertir a formato de nodos
-      state.staticNodes = domainRoutes.map(route => ({
-        id: route.id,
-        title: route.title,
-        titleLower: removeAccents(String(route.title || "").toLowerCase()),
-        module: route.module,
-        description: route.description || "",
-        tag: Array.isArray(route.tag) ? route.tag : (route.tag ? String(route.tag).split("|").filter(t => t.trim()) : []),
-        tagLower: removeAccents((Array.isArray(route.tag) ? route.tag.join(" ") : String(route.tag || "").replace(/\\|/g, " ")).toLowerCase()),
-        pathLabel: Array.isArray(route.tag) ? route.tag.join(" · ") : String(route.tag || "").replace(/\\|/g, " · "),
-        url: absoluteUrl(route.url),
-        action: "navigate",
-        source: "static",
-        usage: state.usageMap.get(route.id) || 0,
-        depth: Array.isArray(route.tag) ? route.tag.length - 1 : (route.tag ? String(route.tag).split("|").length - 1 : 0),
-        status: route.status || "active"
-      }));
-      
+      state.staticNodes = nodes;
       state.staticVersion += 1;
       if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
         state.rankingEngine.invalidateCache();
@@ -923,57 +953,9 @@
     }
   }
   
-  function parseRoutesCSV(csvText) {
-    const lines = csvText.trim().split("\\n");
-    if (lines.length <= 1) return [];
-    
-    const routes = [];
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line.trim()) continue;
-      
-      const values = parseCSVLineValues(line);
-      if (values.length < 8) continue;
-      
-      const route = {
-        domain: values[0] || "",
-        id: values[1] || "",
-        module: values[2] || "",
-        title: values[3] || "",
-        url: values[4] || "",
-        tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
-        description: values[6] || "",
-        status: values[7] || "active"
-      };
-      
-      if (route.domain && route.id && route.title) {
-        routes.push(route);
-      }
-    }
-    
-    return routes;
-  }
-  
   function parseCSVLineValues(line) {
-    const values = [];
-    let current = "";
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        values.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    
-    values.push(current.trim());
-    return values;
+    // Deprecated: using utils.js
+    return [];
   }
 
   function normalizeNode(raw, source) {

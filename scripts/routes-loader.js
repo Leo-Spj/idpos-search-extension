@@ -1,6 +1,7 @@
 // Módulo auxiliar para carga de rutas desde CSV
-const STORAGE_ROUTES_KEY = "navigatorRoutes";
-const CSV_DATA_URL = chrome.runtime.getURL("data/routes.csv");
+import { STORAGE_ROUTES_KEY, CSV_PATH, parseCSV, removeAccents } from './utils.js';
+
+const CSV_DATA_URL = chrome.runtime.getURL(CSV_PATH);
 
 export async function loadRoutesForDomain(domain, usageMap = new Map()) {
   try {
@@ -53,60 +54,3 @@ async function loadDefaultCSV() {
   }
 }
 
-function parseCSV(csvText) {
-  const lines = csvText.trim().split("\n");
-  if (lines.length <= 1) return [];
-  
-  const routes = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-    
-    const values = parseCSVLine(line);
-    if (values.length < 8) continue;
-    
-    const route = {
-      domain: values[0] || "",
-      id: values[1] || "",
-      module: values[2] || "",
-      title: values[3] || "",
-      url: values[4] || "",
-      tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
-      description: values[6] || "",
-      status: values[7] || "active"
-    };
-    
-    if (route.domain && route.id && route.title) {
-      routes.push(route);
-    }
-  }
-  
-  return routes;
-}
-
-function parseCSVLine(line) {
-  const values = [];
-  let current = "";
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === "," && !inQuotes) {
-      values.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  
-  values.push(current.trim());
-  return values;
-}
-
-function removeAccents(text) {
-  if (typeof text !== "string") return "";
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}

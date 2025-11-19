@@ -45,7 +45,8 @@
       "resources": [
         "data/*.csv",
         "scripts/ranking.js",
-        "scripts/routes-loader.js"
+        "scripts/routes-loader.js",
+        "scripts/utils.js"
       ],
       "matches": ["<all_urls>"]
     }
