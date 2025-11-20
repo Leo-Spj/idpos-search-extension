@@ -55,7 +55,6 @@
   let mapNodeToResult = defaultMapNodeToResult;
   let buildCacheKey = defaultBuildCacheKey;
   let removeAccents = defaultRemoveAccents;
-  let removeAccentsGlobal = defaultRemoveAccents; // Fallback global
 
   function defaultMapNodeToResult(node) {
     const source = node || {};
@@ -459,20 +458,12 @@
   init();
 
   async function init() {
-    const utilsUrl = chrome.runtime.getURL("scripts/utils.js");
-    const { removeAccents, CSV_PATH, STORAGE_ROUTES_KEY } = await import(utilsUrl);
-    
-    // Reasignar removeAccents globalmente para este scope
-    removeAccentsGlobal = removeAccents;
-
-    const routesLoaderUrl = chrome.runtime.getURL("scripts/routes-loader.js");
-    const { loadRoutesForDomain } = await import(routesLoaderUrl);
-
+    if (state.initialized) return;
     state.initialized = true;
     await Promise.all([
       ensureRankingEngine(),
       loadShortcutPreference(),
-      loadStaticNavigation(loadRoutesForDomain, STORAGE_ROUTES_KEY),
+      loadStaticNavigation(),
       loadUsageCounts()
     ]);
     ensureOverlay();
@@ -498,8 +489,7 @@
       getDefaultResults = (nodes, context) => state.rankingEngine.getDefaultResults(nodes, context);
       mapNodeToResult = state.rankingEngine.mapNodeToResult;
       buildCacheKey = state.rankingEngine.buildCacheKey;
-      // Usar la versión del engine si está disponible, o la global
-      removeAccents = state.rankingEngine.removeAccents || removeAccentsGlobal;
+      removeAccents = state.rankingEngine.removeAccents;
 
       return state.rankingEngine;
     } catch (error) {
@@ -924,23 +914,60 @@
   }
 
 
-  async function loadStaticNavigation(loadRoutesForDomain, STORAGE_ROUTES_KEY) {
+  async function loadStaticNavigation() {
     state.loadingStatic = true;
     try {
       const currentDomain = normalizeDomain(window.location.hostname);
+      const STORAGE_ROUTES_KEY = "navigatorRoutes";
+      const CSV_DATA_URL = chrome.runtime.getURL("data/routes-example-social.csv");
       
-      // Usar el loader modularizado
-      const nodes = await loadRoutesForDomain(currentDomain, state.usageMap);
+      // Intentar cargar desde storage primero
+      const stored = await chrome.storage.local.get(STORAGE_ROUTES_KEY).catch(err => {
+        if (err.message && err.message.includes('Extension context invalidated')) return {};
+        throw err;
+      });
+      let routes = stored[STORAGE_ROUTES_KEY] || [];
+      
+      // Si no hay rutas en storage, cargar desde CSV por defecto
+      if (routes.length === 0) {
+        const response = await fetch(CSV_DATA_URL);
+        const csvText = await response.text();
+        routes = parseRoutesCSV(csvText);
+        await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes }).catch(err => {
+          if (err.message && err.message.includes('Extension context invalidated')) return;
+          throw err;
+        });
+      }
+      
+      // Filtrar por dominio actual (normalizando ambos para comparación)
+      const domainRoutes = routes.filter(route => normalizeDomain(route.domain) === currentDomain);
       
       // Si no hay rutas para este dominio, no inicializar nada
-      if (nodes.length === 0) {
+      if (domainRoutes.length === 0) {
         console.log(`Navigator: No hay rutas configuradas para ${currentDomain}`);
         state.staticNodes = [];
         state.loadingStatic = false;
         return;
       }
       
-      state.staticNodes = nodes;
+      // Convertir a formato de nodos
+      state.staticNodes = domainRoutes.map(route => ({
+        id: route.id,
+        title: route.title,
+        titleLower: removeAccents(String(route.title || "").toLowerCase()),
+        module: route.module,
+        description: route.description || "",
+        tag: Array.isArray(route.tag) ? route.tag : (route.tag ? String(route.tag).split("|").filter(t => t.trim()) : []),
+        tagLower: removeAccents((Array.isArray(route.tag) ? route.tag.join(" ") : String(route.tag || "").replace(/\\|/g, " ")).toLowerCase()),
+        pathLabel: Array.isArray(route.tag) ? route.tag.join(" · ") : String(route.tag || "").replace(/\\|/g, " · "),
+        url: absoluteUrl(route.url),
+        action: "navigate",
+        source: "static",
+        usage: state.usageMap.get(route.id) || 0,
+        depth: Array.isArray(route.tag) ? route.tag.length - 1 : (route.tag ? String(route.tag).split("|").length - 1 : 0),
+        status: route.status || "active"
+      }));
+      
       state.staticVersion += 1;
       if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
         state.rankingEngine.invalidateCache();
@@ -953,9 +980,57 @@
     }
   }
   
+  function parseRoutesCSV(csvText) {
+    const lines = csvText.trim().split("\\n");
+    if (lines.length <= 1) return [];
+    
+    const routes = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      
+      const values = parseCSVLineValues(line);
+      if (values.length < 8) continue;
+      
+      const route = {
+        domain: values[0] || "",
+        id: values[1] || "",
+        module: values[2] || "",
+        title: values[3] || "",
+        url: values[4] || "",
+        tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
+        description: values[6] || "",
+        status: values[7] || "active"
+      };
+      
+      if (route.domain && route.id && route.title) {
+        routes.push(route);
+      }
+    }
+    
+    return routes;
+  }
+  
   function parseCSVLineValues(line) {
-    // Deprecated: using utils.js
-    return [];
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        values.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    
+    values.push(current.trim());
+    return values;
   }
 
   function normalizeNode(raw, source) {
