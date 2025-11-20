@@ -863,7 +863,7 @@
         // Si el último tag es igual al título, excluirlo del pathLabel
         const pathToShow = normalizedLastTag === normalizedTitle 
           ? item.tag.slice(0, -1) 
-          : item.tag.slice(0, -1);
+          : item.tag.slice();
         
         pathToShow.forEach((pathPart, idx) => {
           if (idx > 0) {
@@ -951,22 +951,28 @@
       }
       
       // Convertir a formato de nodos
-      state.staticNodes = domainRoutes.map(route => ({
-        id: route.id,
-        title: route.title,
-        titleLower: removeAccents(String(route.title || "").toLowerCase()),
-        module: route.module,
-        description: route.description || "",
-        tag: Array.isArray(route.tag) ? route.tag : (route.tag ? String(route.tag).split("|").filter(t => t.trim()) : []),
-        tagLower: removeAccents((Array.isArray(route.tag) ? route.tag.join(" ") : String(route.tag || "").replace(/\\|/g, " ")).toLowerCase()),
-        pathLabel: Array.isArray(route.tag) ? route.tag.join(" · ") : String(route.tag || "").replace(/\\|/g, " · "),
-        url: absoluteUrl(route.url),
-        action: "navigate",
-        source: "static",
-        usage: state.usageMap.get(route.id) || 0,
-        depth: Array.isArray(route.tag) ? route.tag.length - 1 : (route.tag ? String(route.tag).split("|").length - 1 : 0),
-        status: route.status || "active"
-      }));
+      state.staticNodes = domainRoutes.map(route => {
+        const tags = extractRouteTags(route);
+        const pathLabel = tags.length
+          ? tags.join(" · ")
+          : String(route.pathLabel || "").replace(/\|/g, " · ");
+        return {
+          id: route.id,
+          title: route.title,
+          titleLower: removeAccents(String(route.title || "").toLowerCase()),
+          module: route.module,
+          description: route.description || "",
+          tag: tags,
+          tagLower: tags.length ? removeAccents(tags.join(" ").toLowerCase()) : "",
+          pathLabel,
+          url: absoluteUrl(route.url),
+          action: "navigate",
+          source: "static",
+          usage: state.usageMap.get(route.id) || 0,
+          depth: tags.length ? tags.length - 1 : 0,
+          status: route.status || "active"
+        };
+      });
       
       state.staticVersion += 1;
       if (state.rankingEngine && typeof state.rankingEngine.invalidateCache === "function") {
@@ -992,13 +998,15 @@
       const values = parseCSVLineValues(line);
       if (values.length < 8) continue;
       
+      const tagList = normalizeTagList(values[5]);
       const route = {
         domain: values[0] || "",
         id: values[1] || "",
         module: values[2] || "",
         title: values[3] || "",
         url: values[4] || "",
-        tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
+        tag: tagList,
+        tags: tagList.join("|"),
         description: values[6] || "",
         status: values[7] || "active"
       };
@@ -1033,9 +1041,35 @@
     return values;
   }
 
+  function normalizeTagList(value) {
+    if (!value) return [];
+    const sourceArray = Array.isArray(value)
+      ? value
+      : String(value)
+          .replace(/^"|"$/g, "")
+          .replace(/·/g, "|")
+          .replace(/>/g, "|")
+          .replace(/,/g, "|")
+          .split("|");
+
+    return sourceArray
+      .map(part => String(part).trim())
+      .filter(Boolean);
+  }
+
+  function extractRouteTags(route) {
+    if (!route) return [];
+    const candidates = [route.tag, route.tags, route.pathLabel];
+    for (const candidate of candidates) {
+      const normalized = normalizeTagList(candidate);
+      if (normalized.length) return normalized;
+    }
+    return [];
+  }
+
   function normalizeNode(raw, source) {
     const id = raw.id || `${source}:${raw.url || raw.title}`;
-    const tag = Array.isArray(raw.tag) ? raw.tag : buildPath(raw.pathLabel);
+    const tag = extractRouteTags(raw);
     const depth = tag.length ? tag.length - 1 : 0;
     const title = raw.title || (tag.length ? tag[tag.length - 1] : "");
     return {
@@ -1076,12 +1110,6 @@
       hash = hash & hash; // Convert to 32bit integer
     }
     return Math.abs(hash % 10); // 10 variantes de color
-  }
-
-  function buildPath(path) {
-    if (!path) return [];
-    if (Array.isArray(path)) return path;
-    return String(path).split("|").map(piece => piece.trim()).filter(Boolean);
   }
 
   function absoluteUrl(url) {
