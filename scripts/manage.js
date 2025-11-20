@@ -4,6 +4,13 @@ let allRoutes = [];
 let currentView = 'dashboard';
 let searchTerm = '';
 
+const ALL_DOMAINS_VALUE = '__all__';
+const CSV_HEADERS = ['domain', 'id', 'module', 'title', 'url', 'tags', 'description', 'status'];
+
+function createRouteId(prefix = 'route') {
+  return `${prefix}:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 // DOM Elements
 const elements = {
   grid: document.getElementById('domainGrid'),
@@ -20,6 +27,162 @@ const elements = {
   form: document.getElementById('routeForm'),
   fab: document.getElementById('addRouteFab')
 };
+
+function escapeCsvValue(value) {
+  const stringValue = `${value ?? ''}`;
+  const escaped = stringValue.replace(/"/g, '""');
+  return /[",\n]/.test(stringValue) ? `"${escaped}"` : escaped;
+}
+
+function sortRoutesForExport(routes) {
+  return [...routes].sort((a, b) => {
+    const domainCompare = (a.domain || '').localeCompare(b.domain || '', 'es');
+    if (domainCompare !== 0) return domainCompare;
+    const moduleCompare = (a.module || '').localeCompare(b.module || '', 'es');
+    if (moduleCompare !== 0) return moduleCompare;
+    const titleCompare = (a.title || '').localeCompare(b.title || '', 'es');
+    if (titleCompare !== 0) return titleCompare;
+    return (a.id || '').localeCompare(b.id || '', 'es');
+  });
+}
+
+function buildCsvContent(routes) {
+  const header = CSV_HEADERS.join(',');
+  const rows = routes.map(route => CSV_HEADERS.map(key => escapeCsvValue(route[key] ?? '')).join(','));
+  return [header, ...rows].join('\n');
+}
+
+function downloadCsv(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function slugify(value) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'datos';
+}
+
+function parseCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result.map(value => value.replace(/\r$/, ''));
+}
+
+function parseCsv(content) {
+  if (!content) return [];
+  const lines = content.split(/\r?\n/).filter(line => line.trim().length);
+  if (!lines.length) return [];
+
+  const headers = parseCsvLine(lines.shift()).map(header => header.replace(/^\ufeff/, '').trim().toLowerCase());
+  return lines.map(line => {
+    const values = parseCsvLine(line);
+    const entry = {};
+    headers.forEach((header, index) => {
+      entry[header] = (values[index] ?? '').trim();
+    });
+    return entry;
+  });
+}
+
+function normalizeTags(raw) {
+  if (!raw) return '';
+  return raw
+    .split(/[|,]/)
+    .map(tag => tag.trim())
+    .filter(Boolean)
+    .join('|');
+}
+
+function getDomainCounts() {
+  return allRoutes.reduce((acc, route) => {
+    const domain = route.domain || '';
+    acc[domain] = (acc[domain] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function populateDataDomainSelect() {
+  const select = document.getElementById('dataDomainSelect');
+  if (!select) return;
+
+  const previousValue = select.value;
+  const counts = getDomainCounts();
+  const domains = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'es')); // alphabetical for predictability
+
+  let options = `<option value="${ALL_DOMAINS_VALUE}">Todos los dominios (${allRoutes.length})</option>`;
+  domains.forEach(domain => {
+    const label = domain || '(sin dominio)';
+    const valueAttr = domain;
+    options += `<option value="${valueAttr}">${label} (${counts[domain]} rutas)</option>`;
+  });
+
+  select.innerHTML = options;
+  if (previousValue && (previousValue === ALL_DOMAINS_VALUE || counts[previousValue])) {
+    select.value = previousValue;
+  } else {
+    select.value = ALL_DOMAINS_VALUE;
+  }
+
+  updateDomainDataControls();
+}
+
+function updateDomainDataControls() {
+  const select = document.getElementById('dataDomainSelect');
+  if (!select) return;
+
+  const hasDomain = select.value !== ALL_DOMAINS_VALUE;
+  const exportDomainBtn = document.getElementById('exportDomainBtn');
+  const deleteDomainBtn = document.getElementById('deleteDomainDataBtn');
+
+  if (exportDomainBtn) exportDomainBtn.disabled = !hasDomain;
+  if (deleteDomainBtn) deleteDomainBtn.disabled = !hasDomain;
+}
+
+function getSelectedDomainForDataOps() {
+  const select = document.getElementById('dataDomainSelect');
+  return select ? select.value : ALL_DOMAINS_VALUE;
+}
+
+function exportRoutesToCsv(routes, scopeLabel = 'todos') {
+  if (!routes.length) {
+    alert('No hay rutas para exportar');
+    return;
+  }
+
+  const sorted = sortRoutesForExport(routes);
+  const csvContent = buildCsvContent(sorted);
+  const timestamp = new Date().toISOString().split('T')[0];
+  const suffix = scopeLabel && scopeLabel !== ALL_DOMAINS_VALUE ? `-${slugify(scopeLabel)}` : '';
+  downloadCsv(csvContent, `universal-navigator-routes${suffix}-${timestamp}.csv`);
+}
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
@@ -53,9 +216,10 @@ function render() {
   // Filter routes
   const filtered = allRoutes.filter(r => {
     const term = searchTerm.toLowerCase();
-    return r.title.toLowerCase().includes(term) || 
-           r.domain.toLowerCase().includes(term) ||
-           r.module.toLowerCase().includes(term);
+    const title = (r.title || '').toLowerCase();
+    const domain = (r.domain || '').toLowerCase();
+    const moduleName = (r.module || '').toLowerCase();
+    return title.includes(term) || domain.includes(term) || moduleName.includes(term);
   });
 
   // Render Grid (Dashboard)
@@ -63,6 +227,8 @@ function render() {
 
   // Render List
   renderList(filtered);
+
+  populateDataDomainSelect();
 }
 
 function renderGrid(routes) {
@@ -121,12 +287,16 @@ function renderList(routes) {
   elements.list.innerHTML = routes.map(r => {
     const tags = (r.tags && typeof r.tags === 'string') ? r.tags.split('|').filter(t => t.trim()) : [];
     const description = r.description || '';
+    const title = r.title || '(Sin título)';
+    const domain = r.domain || 'Sin dominio';
+    const moduleName = r.module || 'General';
+    const url = r.url || '';
     
     return `
     <div class="route-row" data-id="${r.id}">
       <div class="route-main">
         <div class="route-header">
-          <h4 class="route-title">${r.title}</h4>
+          <h4 class="route-title">${title}</h4>
           <span class="badge" style="background: ${r.status === 'active' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${r.status === 'active' ? '#4ade80' : '#f87171'}; border: 1px solid ${r.status === 'active' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)'}; padding: 2px 8px; font-size: 10px;">
             ${r.status === 'active' ? 'ACTIVO' : 'LEGACY'}
           </span>
@@ -136,13 +306,13 @@ function renderList(routes) {
         
         <div class="route-meta-row">
           <div class="meta-item" title="Dominio">
-            <span style="opacity: 0.5;">🌐</span> ${r.domain}
+            <span style="opacity: 0.5;">🌐</span> ${domain}
           </div>
           <div class="meta-item" title="Módulo">
-            <span style="opacity: 0.5;">📁</span> ${r.module}
+            <span style="opacity: 0.5;">📁</span> ${moduleName}
           </div>
           <div class="meta-item">
-            <span class="url-badge">${r.url}</span>
+            <span class="url-badge">${url}</span>
           </div>
         </div>
 
@@ -171,7 +341,8 @@ function filterByDomain(domain) {
 }
 
 async function deleteDomain(domain) {
-  if (!confirm(`¿Eliminar TODAS las rutas de ${domain}?`)) return;
+  const label = domain || '(sin dominio)';
+  if (!confirm(`¿Eliminar TODAS las rutas de ${label}?`)) return;
   allRoutes = allRoutes.filter(r => r.domain !== domain);
   await saveRoutes();
 }
@@ -349,64 +520,119 @@ function setupEventListeners() {
     closeModal();
   });
 
+  const dataDomainSelect = document.getElementById('dataDomainSelect');
+  if (dataDomainSelect) {
+    dataDomainSelect.addEventListener('change', updateDomainDataControls);
+  }
+
   // Export
-  document.getElementById('exportBtn').addEventListener('click', () => {
-    const csv = 'domain,id,module,title,url,tags,description,status\n' + 
-      allRoutes.map(r => Object.values(r).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'navigator_routes.csv';
-    a.click();
-  });
+  const exportAllBtn = document.getElementById('exportBtn');
+  if (exportAllBtn) {
+    exportAllBtn.addEventListener('click', () => {
+      exportRoutesToCsv(allRoutes, ALL_DOMAINS_VALUE);
+    });
+  }
+
+  const exportDomainBtn = document.getElementById('exportDomainBtn');
+  if (exportDomainBtn) {
+    exportDomainBtn.addEventListener('click', () => {
+      const selectedDomain = getSelectedDomainForDataOps();
+      if (selectedDomain === ALL_DOMAINS_VALUE) return;
+      const domainRoutes = allRoutes.filter(route => route.domain === selectedDomain);
+      if (!domainRoutes.length) {
+        alert('Ese dominio no tiene rutas todavía');
+        return;
+      }
+      exportRoutesToCsv(domainRoutes, selectedDomain);
+    });
+  }
+
+  const deleteDomainDataBtn = document.getElementById('deleteDomainDataBtn');
+  if (deleteDomainDataBtn) {
+    deleteDomainDataBtn.addEventListener('click', () => {
+      const selectedDomain = getSelectedDomainForDataOps();
+      if (selectedDomain === ALL_DOMAINS_VALUE) return;
+      deleteDomain(selectedDomain);
+    });
+  }
   
   // Download Template
-  document.getElementById('templateBtn').addEventListener('click', () => {
-    const template = `domain,id,module,title,url,tags,description,status
+  const templateBtn = document.getElementById('templateBtn');
+  if (templateBtn) {
+    templateBtn.addEventListener('click', () => {
+      const template = `domain,id,module,title,url,tags,description,status
 example.com,page:home,General,Página Principal,/home,inicio|favorito,Página de inicio del sitio,active
 example.com,page:dashboard,Admin,Dashboard,/admin/dashboard,admin|importante,Panel de administración,active
 example.com,page:settings,Admin,Configuración,/admin/settings,admin,Configuración del sistema,active`;
-    
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'navigator_template.csv';
-    a.click();
-  });
+      
+      const blob = new Blob([template], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'navigator_template.csv';
+      a.click();
+    });
+  }
   
   // CSV Import Button
-  document.getElementById('selectCsvBtn').addEventListener('click', () => {
-    document.getElementById('csvInput').click();
-  });
+  const selectCsvBtn = document.getElementById('selectCsvBtn');
+  if (selectCsvBtn) {
+    selectCsvBtn.addEventListener('click', () => {
+      document.getElementById('csvInput').click();
+    });
+  }
 
   // CSV Import
-  document.getElementById('csvInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const text = await file.text();
-    const lines = text.split('\n').slice(1); // Skip header
-    
-    let count = 0;
-    lines.forEach(line => {
-      if (!line.trim()) return;
-      const [domain, id, module, title, url, tags, description, status] = line.split(',');
+  const csvInput = document.getElementById('csvInput');
+  if (csvInput) {
+    csvInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
       
-      // Simple merge logic
-      const existingIndex = allRoutes.findIndex(r => r.id === id);
-      const route = { domain, id, module, title, url, tags, description, status };
-      
-      if (existingIndex >= 0) allRoutes[existingIndex] = route;
-      else allRoutes.push(route);
-      count++;
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (!rows.length) {
+        alert('El archivo no contiene datos válidos');
+        e.target.value = '';
+        return;
+      }
+
+      const selectedDomain = getSelectedDomainForDataOps();
+      const forcedDomain = selectedDomain !== ALL_DOMAINS_VALUE ? selectedDomain : null;
+
+      let imported = 0;
+      let skipped = 0;
+
+      rows.forEach(row => {
+        const domainFromRow = (row.domain || '').trim();
+        const domain = forcedDomain || domainFromRow;
+
+        if (!domain) {
+          skipped++;
+          return;
+        }
+
+        const id = (row.id || '').trim() || createRouteId('csv');
+        const moduleName = (row.module || '').trim() || 'General';
+        const title = (row.title || '').trim() || '(Sin título)';
+        const url = (row.url || '').trim() || '/';
+        const statusInput = ((row.status || '').trim() || 'active').toLowerCase();
+        const status = statusInput === 'legacy' ? 'legacy' : 'active';
+        const tags = normalizeTags(row.tags || '');
+        const description = (row.description || '').trim();
+
+        const newRoute = { domain, id, module: moduleName, title, url, status, tags, description };
+        const existingIndex = allRoutes.findIndex(route => route.id === id);
+        if (existingIndex >= 0) allRoutes[existingIndex] = newRoute;
+        else allRoutes.push(newRoute);
+        imported++;
+      });
+
+      await saveRoutes();
+      alert(`Importadas ${imported} rutas correctamente${skipped ? ` | Omitidas ${skipped} sin dominio` : ''}`);
+      e.target.value = ''; // Reset input
     });
-    
-    await saveRoutes();
-    alert(`Importadas ${count} rutas correctamente`);
-    e.target.value = ''; // Reset input
-  });
+  }
 
   // Event Delegation for Grid (Dashboard)
   elements.grid.addEventListener('click', (e) => {

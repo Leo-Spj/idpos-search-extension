@@ -741,11 +741,25 @@
                     <p style="color: var(--text-muted); margin-bottom: 24px;">Exporta tu configuración para respaldo o
                         importa nuevas rutas desde un CSV.</p>
 
-                    <div class="flex gap-2" style="margin-bottom: 32px;">
-                        <button class="btn btn-primary" id="exportBtn">📤 Exportar Todo</button>
-                        <button class="btn btn-ghost" style="border: 1px solid var(--border);" id="templateBtn">📄
-                            Plantilla CSV</button>
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="form-label" style="color: var(--text-muted);">Dominio objetivo</label>
+                        <select class="form-input" id="dataDomainSelect">
+                            <option value="__all__">Todos los dominios</option>
+                        </select>
+                        <small style="display: block; margin-top: 6px; font-size: 12px; opacity: 0.75;">Utiliza esta
+                            selección para exportar, limpiar o importar datos específicos de un dominio.</small>
                     </div>
+
+                    <div class="flex gap-2" style="flex-wrap: wrap; margin-bottom: 16px;">
+                        <button class="btn btn-primary" id="exportBtn">📤 Exportar Todo</button>
+                        <button class="btn btn-ghost" style="border: 1px solid var(--border);" id="exportDomainBtn"
+                            disabled>📤 Exportar Dominio</button>
+                        <button class="btn btn-ghost" style="border: 1px solid var(--border);"
+                            id="deleteDomainDataBtn" disabled>🧹 Limpiar Dominio</button>
+                    </div>
+
+                    <button class="btn btn-ghost" style="border: 1px solid var(--border); margin-bottom: 32px;"
+                        id="templateBtn">📄 Plantilla CSV</button>
 
                     <div style="border-top: 1px solid var(--border); padding-top: 24px;">
                         <h3 class="domain-name" style="font-size: 16px; margin-bottom: 12px;">Importar CSV</h3>
@@ -755,6 +769,8 @@
                             <span style="font-size: 24px; display: block; margin-bottom: 8px;">📁</span>
                             Click para seleccionar archivo
                         </button>
+                        <small style="display: block; margin-top: 12px; font-size: 12px; opacity: 0.75;">Si eliges un
+                            dominio arriba, las rutas importadas se asignarán automáticamente a él.</small>
                     </div>
                 </div>
             </div>
