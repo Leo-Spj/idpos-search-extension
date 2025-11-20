@@ -433,6 +433,14 @@
   `;
 
   document.addEventListener("keydown", handleGlobalShortcut, true);
+
+  // Bloquea la propagación de eventos de teclado a la página cuando el overlay está abierto.
+  document.addEventListener("keydown", (e) => {
+    if (state.open) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "TOGGLE_OVERLAY") return;
     toggleOverlay();
