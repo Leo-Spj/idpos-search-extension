@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Universal Navigator",
   "description": "Floating command bar to accelerate navigation on any website with custom routes.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

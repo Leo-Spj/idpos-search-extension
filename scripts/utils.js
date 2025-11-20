@@ -24,7 +24,7 @@ export function parseCSV(csvText) {
       module: values[2] || "",
       title: values[3] || "",
       url: values[4] || "",
-      tag: values[5] ? values[5].replace(/^"|"$/g, "").split("|").filter(t => t.trim()) : [],
+      tags: values[5] ? values[5].replace(/^"|"$/g, "") : "",
       description: values[6] || "",
       status: values[7] || "active"
     };

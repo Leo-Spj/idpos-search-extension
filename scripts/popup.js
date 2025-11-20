@@ -93,11 +93,12 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
   document.getElementById('modalDomain').textContent = `Dominio: ${domain}`;
   document.getElementById('addRouteModal').classList.add('active');
   
-  // Auto-rellenar URL con la página actual
+  // Auto-rellenar URL con la página actual (sin query parameters)
   try {
     if (tab && tab.url) {
       const url = new URL(tab.url);
-      document.getElementById('routeUrl').value = url.pathname + url.search;
+      // Solo pathname, sin search (query parameters)
+      document.getElementById('routeUrl').value = url.pathname;
       document.getElementById('routeTitle').value = tab.title || '';
     }
   } catch (error) {
@@ -154,7 +155,7 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
       module: module,
       title: title,
       url: url,
-      tags: tags.split(',').map(t => t.trim()).filter(t => t),
+      tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
       description: description,
       status: 'active'
     };

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -45,7 +46,7 @@
     }
 
     .stat-item {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.25);
       padding: 15px;
       text-align: center;
     }
@@ -72,7 +73,7 @@
       width: 100%;
       padding: 12px 16px;
       margin-bottom: 10px;
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.25);
       border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 8px;
       color: #fff;
@@ -86,8 +87,9 @@
     }
 
     .action-btn:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.35);
       transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.4);
     }
 
     .action-btn:active {
@@ -104,10 +106,12 @@
       background: rgba(255, 255, 255, 0.95);
       color: #764ba2;
       font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
     .action-btn.primary:hover {
       background: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     .shortcut {
@@ -115,7 +119,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 12px 15px;
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.3);
       border-radius: 8px;
       font-size: 13px;
       margin-top: 5px;
@@ -127,7 +131,7 @@
     }
 
     .key {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.3);
       padding: 3px 8px;
       border-radius: 4px;
       font-size: 11px;
@@ -205,7 +209,7 @@
       padding: 10px;
       border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.3);
       color: #fff;
       font-size: 14px;
       font-family: inherit;
@@ -213,7 +217,7 @@
 
     .form-group input::placeholder,
     .form-group textarea::placeholder {
-      color: rgba(255, 255, 255, 0.6);
+      color: rgba(255, 255, 255, 0.5);
     }
 
     .form-group textarea {
@@ -246,12 +250,13 @@
     }
 
     .modal-btn.cancel {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.3);
       color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
     }
 
     .modal-btn.cancel:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.4);
     }
 
     .modal-btn.save {
@@ -265,10 +270,11 @@
 
     .current-site {
       padding: 12px 15px;
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.3);
       margin: 15px;
       border-radius: 8px;
       font-size: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .current-site strong {
@@ -286,6 +292,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="header">
     <h1>⚡ Universal Navigator</h1>
@@ -311,28 +318,35 @@
   <div class="actions">
     <button class="action-btn primary" id="openNavigatorBtn">
       <svg fill="currentColor" viewBox="0 0 20 20">
-        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+        <path fill-rule="evenodd"
+          d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+          clip-rule="evenodd" />
       </svg>
       Abrir Navegador
     </button>
 
     <button class="action-btn" id="addRouteBtn">
       <svg fill="currentColor" viewBox="0 0 20 20">
-        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+        <path fill-rule="evenodd"
+          d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+          clip-rule="evenodd" />
       </svg>
       Añadir Ruta Aquí
     </button>
 
     <button class="action-btn" id="manageRoutesBtn">
       <svg fill="currentColor" viewBox="0 0 20 20">
-        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+        <path
+          d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
       </svg>
       Gestionar Rutas
     </button>
 
     <button class="action-btn" id="exportRoutesBtn">
       <svg fill="currentColor" viewBox="0 0 20 20">
-        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        <path fill-rule="evenodd"
+          d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+          clip-rule="evenodd" />
       </svg>
       Exportar Rutas
     </button>
@@ -398,4 +412,5 @@
 
   <script src="../scripts/popup.js"></script>
 </body>
+
 </html>
