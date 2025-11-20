@@ -791,15 +791,7 @@
 
   function updateInputOverlay(query) {
     if (!state.inputOverlay) return;
-    
-    const categoryMatch = query.match(/^([a-záéíóúñ]+:)/i);
-    if (categoryMatch) {
-      const prefix = categoryMatch[1];
-      const rest = query.substring(prefix.length);
-      state.inputOverlay.innerHTML = `<span class="filter-prefix">${escapeHtml(prefix)}</span>${escapeHtml(rest)}`;
-    } else {
-      state.inputOverlay.innerHTML = "";
-    }
+    state.inputOverlay.innerHTML = "";
   }
 
   function escapeHtml(text) {
