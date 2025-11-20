@@ -231,7 +231,27 @@ function scoreNode(tokens, node, frequencyData, now) {
       tokenScore = 50;
       tokenQuality = 0.2;
     } else {
-      return 0;
+      const approxTitle = approximateTokenMatch(title, token);
+      const approxTag = approximateTokenMatch(tag, token);
+      const approxDescription = approximateTokenMatch(description, token, 1);
+      const approxDistances = [approxTitle, approxTag, approxDescription]
+        .filter(distance => distance !== null && distance !== undefined);
+
+      if (!approxDistances.length) {
+        return 0;
+      }
+
+      const bestApprox = Math.min(...approxDistances);
+      if (bestApprox <= 0) {
+        tokenScore = 140;
+        tokenQuality = 0.35;
+      } else if (bestApprox === 1) {
+        tokenScore = 120;
+        tokenQuality = 0.3;
+      } else {
+        tokenScore = 90;
+        tokenQuality = 0.25;
+      }
     }
 
     textScore += tokenScore;
@@ -319,6 +339,70 @@ function fuzzyIncludes(haystack, needle) {
   }
 
   return false;
+}
+
+function approximateTokenMatch(text, token, maxDistance = 2) {
+  if (!text || !token) return null;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+
+  let bestDistance = maxDistance + 1;
+  for (const word of words) {
+    if (!word) continue;
+    const distance = damerauLevenshteinDistance(word, token, maxDistance);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      if (bestDistance === 0) break;
+    }
+  }
+
+  return bestDistance <= maxDistance ? bestDistance : null;
+}
+
+function damerauLevenshteinDistance(a, b, maxDistance = 2) {
+  if (a === b) return 0;
+  const lenA = a.length;
+  const lenB = b.length;
+  if (lenA === 0) return lenB;
+  if (lenB === 0) return lenA;
+  if (Math.abs(lenA - lenB) > maxDistance) return maxDistance + 1;
+
+  const dp = new Array(lenA + 1);
+  for (let i = 0; i <= lenA; i++) {
+    dp[i] = new Array(lenB + 1).fill(0);
+    dp[i][0] = i;
+  }
+  for (let j = 0; j <= lenB; j++) {
+    dp[0][j] = j;
+  }
+
+  for (let i = 1; i <= lenA; i++) {
+    let rowBest = maxDistance + 1;
+    const charA = a[i - 1];
+    for (let j = 1; j <= lenB; j++) {
+      const charB = b[j - 1];
+      const cost = charA === charB ? 0 : 1;
+
+      let value = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+
+      if (i > 1 && j > 1 && charA === b[j - 2] && a[i - 2] === charB) {
+        value = Math.min(value, dp[i - 2][j - 2] + cost);
+      }
+
+      dp[i][j] = value;
+      if (value < rowBest) rowBest = value;
+    }
+
+    if (rowBest > maxDistance) {
+      return maxDistance + 1;
+    }
+  }
+
+  return dp[lenA][lenB];
 }
 
 function escapeRegex(value) {
