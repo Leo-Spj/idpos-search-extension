@@ -25,14 +25,14 @@ export async function loadRoutesForDomain(domain, usageMap = new Map()) {
       titleLower: removeAccents(String(route.title || "").toLowerCase()),
       module: route.module,
       description: route.description || "",
-      tag: Array.isArray(route.tag) ? route.tag : (route.tag ? String(route.tag).split("|").filter(t => t.trim()) : []),
-      tagLower: removeAccents((Array.isArray(route.tag) ? route.tag.join(" ") : String(route.tag || "").replace(/\|/g, " ")).toLowerCase()),
-      pathLabel: Array.isArray(route.tag) ? route.tag.join(" · ") : String(route.tag || "").replace(/\|/g, " · "),
+      tag: Array.isArray(route.tags) ? route.tags : (route.tags ? String(route.tags).split("|").filter(t => t.trim()) : []),
+      tagLower: removeAccents((Array.isArray(route.tags) ? route.tags.join(" ") : String(route.tags || "").replace(/\|/g, " ")).toLowerCase()),
+      pathLabel: Array.isArray(route.tags) ? route.tags.join(" · ") : String(route.tags || "").replace(/\|/g, " · "),
       url: route.url.startsWith("http") ? route.url : `${window.location.protocol}//${domain}${route.url}`,
       action: "navigate",
       source: "static",
       usage: usageMap.get(route.id) || 0,
-      depth: Array.isArray(route.tag) ? route.tag.length - 1 : (route.tag ? String(route.tag).split("|").length - 1 : 0),
+      depth: Array.isArray(route.tags) ? route.tags.length - 1 : (route.tags ? String(route.tags).split("|").length - 1 : 0),
       status: route.status || "active"
     }));
     

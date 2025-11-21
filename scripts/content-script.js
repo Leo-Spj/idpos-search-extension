@@ -851,7 +851,7 @@
       titleWrapper.appendChild(titleSpan);
 
       // Agregar etiquetas de path en el lado derecho
-      if (item.tag && item.tag.length > 1) {
+      if (item.tag && item.tag.length > 0) {
         const pathTags = document.createElement("div");
         pathTags.className = "result-path-tags";
         
