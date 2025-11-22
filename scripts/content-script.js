@@ -169,6 +169,7 @@
         overflow-y: auto;
         border-radius: 9px;
         background: rgba(255, 255, 255, 0.04);
+        scroll-behavior: smooth;
       }
       .results::-webkit-scrollbar {
         width: 8px;
@@ -408,7 +409,7 @@
         }
       }
     </style>
-    <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar">
+    <div class="overlay" role="dialog" aria-modal="true" aria-label="ID POS command bar" tabindex="-1">
       <div style="position: relative;">
         <div class="category-filter" id="category-filter">
           <span id="category-name">Filtrando</span>
@@ -436,12 +437,55 @@
 
   // Bloquea la propagación de eventos de teclado a la página cuando el overlay está abierto.
   document.addEventListener("keydown", (e) => {
-    if (state.open) {
+    if (!state.open) return;
+    
+    // Lista de teclas que debe interceptar el navegador
+    const navigatorKeys = ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'];
+    
+    if (navigatorKeys.includes(e.key)) {
+      // Detener completamente la propagación y manejar aquí mismo
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      
+      // Manejar la navegación directamente aquí
+      handleNavigationKey(e.key, e.shiftKey);
+    } else if (e.key !== 'Shift') {
+      // Para otras teclas que no sean Shift, detener la propagación para evitar interferencias
+      // Shift debe llegar al overlay para el indicador visual
       e.stopImmediatePropagation();
     }
   }, true);
 
-  chrome.runtime.onMessage.addListener((message) => {
+  // Función para manejar teclas de navegación directamente
+  function handleNavigationKey(key, shiftKey) {
+    if (!state.results.length) {
+      if (key === "Escape") {
+        closeOverlay();
+      }
+      return;
+    }
+    
+    const maxIndex = state.results.length - 1;
+    switch (key) {
+      case "ArrowDown":
+        state.selectedIndex = state.selectedIndex >= maxIndex ? 0 : state.selectedIndex + 1;
+        updateActiveItem();
+        break;
+      case "ArrowUp":
+        state.selectedIndex = state.selectedIndex <= 0 ? maxIndex : state.selectedIndex - 1;
+        updateActiveItem();
+        break;
+      case "Enter":
+        activateSelected(shiftKey);
+        break;
+      case "Escape":
+        closeOverlay();
+        break;
+      case "Tab":
+        // Tab solo previene el comportamiento por defecto
+        break;
+    }
+  }  chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "TOGGLE_OVERLAY") return;
     toggleOverlay();
   });
@@ -551,11 +595,11 @@
     state.inputOverlay = inputOverlay;
 
     input.addEventListener("input", handleQueryInput);
-    input.addEventListener("keydown", handleInputKeys);
+    // El manejo de teclas se hace desde el documento para evitar duplicación
     list.addEventListener("click", onResultClick);
     
-    // Listeners para detectar Shift
-    overlay.addEventListener("keydown", handleShiftDown);
+    // Listeners para detectar Shift (mantener en overlay)
+    overlay.addEventListener("keydown", handleShiftDown, true);
     overlay.addEventListener("keyup", handleShiftUp);
     
     // Listener para limpiar el filtro de categoría
@@ -590,7 +634,12 @@
     if (state.host) state.host.style.pointerEvents = "auto";
     if (state.input) {
       state.input.value = "";
-      state.input.focus({ preventScroll: true });
+      // Forzar el foco en el input con un pequeño delay para asegurar que se aplique
+      setTimeout(() => {
+        if (state.input) {
+          state.input.focus({ preventScroll: true });
+        }
+      }, 50);
     }
     state.selectedIndex = 0;
   renderResults(getDefaultResults(state.nodes));
@@ -661,39 +710,16 @@
   }
 
   function handleInputKeys(event) {
-    if (!state.results.length) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeOverlay();
-      }
-      return;
+    // Esta función ya no se usa directamente, el manejo se hace en handleNavigationKey
+    // Mantener para compatibilidad con otros lugares que puedan llamarla
+    const navigationKeys = ["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"];
+    
+    if (navigationKeys.includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
     }
-    const maxIndex = state.results.length - 1;
-    switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        state.selectedIndex = state.selectedIndex >= maxIndex ? 0 : state.selectedIndex + 1;
-        updateActiveItem();
-        break;
-      case "ArrowUp":
-        event.preventDefault();
-        state.selectedIndex = state.selectedIndex <= 0 ? maxIndex : state.selectedIndex - 1;
-        updateActiveItem();
-        break;
-      case "Enter":
-        event.preventDefault();
-        activateSelected(event.shiftKey);
-        break;
-      case "Escape":
-        event.preventDefault();
-        closeOverlay();
-        break;
-      case "Tab":
-        event.preventDefault();
-        break;
-      default:
-        break;
-    }
+    
+    // El resto de la lógica se maneja en handleNavigationKey
   }
 
   function buildRankingContext(query, nodes) {
@@ -905,7 +931,8 @@
       if (idx === state.selectedIndex) {
         child.classList.add("active");
         child.setAttribute("aria-selected", "true");
-        child.scrollIntoView({ block: "nearest" });
+        // Scroll al elemento seleccionado (el comportamiento smooth viene del CSS)
+        child.scrollIntoView({ block: "nearest", inline: "nearest" });
       } else {
         child.classList.remove("active");
         child.setAttribute("aria-selected", "false");

@@ -58,6 +58,91 @@ function normalizeDomain(domain) {
   return domain.replace(/^www\./, '');
 }
 
+// Función para normalizar URLs para comparación
+function normalizeUrl(url) {
+  try {
+    // Si es una URL completa, extraer solo el pathname
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const urlObj = new URL(url);
+      return urlObj.pathname.replace(/\/$/, '').toLowerCase();
+    }
+    // Si es una ruta relativa
+    return url.replace(/\/$/, '').toLowerCase();
+  } catch {
+    return url.replace(/\/$/, '').toLowerCase();
+  }
+}
+
+// Función para buscar rutas duplicadas
+function findDuplicateRoute(domain, url, title, excludeId = null) {
+  const normalizedDomain = normalizeDomain(domain);
+  const normalizedUrl = normalizeUrl(url);
+  const normalizedTitle = title.toLowerCase().trim();
+  
+  return cachedRoutes.find(route => {
+    if (excludeId && route.id === excludeId) return false;
+    if (normalizeDomain(route.domain) !== normalizedDomain) return false;
+    
+    const routeUrl = normalizeUrl(route.url);
+    const routeTitle = (route.title || '').toLowerCase().trim();
+    
+    // Duplicado si coincide URL o título
+    return routeUrl === normalizedUrl || routeTitle === normalizedTitle;
+  });
+}
+
+// Función para mostrar alerta de duplicado
+function showDuplicateAlert(duplicateRoute) {
+  const alertContainer = document.getElementById('duplicateAlert');
+  if (!alertContainer) return;
+  
+  const tags = parseTagsField(duplicateRoute.tags).join(', ') || 'Sin tags';
+  
+  alertContainer.innerHTML = `
+    <div class="duplicate-alert">
+      <div class="duplicate-alert-title">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        ⚠️ Ya existe una ruta similar
+      </div>
+      <div class="duplicate-route-info">
+        <div><strong>Título:</strong> ${duplicateRoute.title}</div>
+        <div><strong>URL:</strong> ${duplicateRoute.url}</div>
+        <div><strong>Módulo:</strong> ${duplicateRoute.module || 'General'}</div>
+        <div><strong>Tags:</strong> ${tags}</div>
+      </div>
+    </div>
+  `;
+  
+  alertContainer.style.display = 'block';
+  document.getElementById('editDuplicateBtn').style.display = 'block';
+  document.getElementById('saveRouteBtn').textContent = 'Crear de Todos Modos';
+  
+  // Guardar ID de la ruta duplicada para edición
+  document.getElementById('editDuplicateBtn').dataset.duplicateId = duplicateRoute.id;
+}
+
+// Función para ocultar alerta de duplicado
+function hideDuplicateAlert() {
+  const alertContainer = document.getElementById('duplicateAlert');
+  if (alertContainer) {
+    alertContainer.style.display = 'none';
+    alertContainer.innerHTML = '';
+  }
+  
+  const editBtn = document.getElementById('editDuplicateBtn');
+  if (editBtn) {
+    editBtn.style.display = 'none';
+    delete editBtn.dataset.duplicateId;
+  }
+  
+  const saveBtn = document.getElementById('saveRouteBtn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Guardar Ruta';
+  }
+}
+
 // Función para obtener el dominio actual
 async function getCurrentDomain() {
   try {
@@ -295,6 +380,12 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
     return;
   }
   
+  // Resetear formulario y estado
+  document.getElementById('addRouteForm').reset();
+  hideDuplicateAlert();
+  document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
+  document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
+  
   document.getElementById('modalDomain').textContent = `Dominio: ${domain}`;
   document.getElementById('addRouteModal').classList.add('active');
   
@@ -303,8 +394,15 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
     if (tab && tab.url) {
       const url = new URL(tab.url);
       // Solo pathname, sin search (query parameters)
-      document.getElementById('routeUrl').value = url.pathname;
+      const pathname = url.pathname;
+      document.getElementById('routeUrl').value = pathname;
       document.getElementById('routeTitle').value = tab.title || '';
+      
+      // Buscar duplicados inmediatamente
+      const duplicate = findDuplicateRoute(domain, pathname, tab.title || '');
+      if (duplicate) {
+        showDuplicateAlert(duplicate);
+      }
     }
   } catch (error) {
     console.error('Error getting current URL:', error);
@@ -319,6 +417,9 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
 document.getElementById('cancelAddRoute').addEventListener('click', () => {
   document.getElementById('addRouteModal').classList.remove('active');
   document.getElementById('addRouteForm').reset();
+  hideDuplicateAlert();
+  document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
+  document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
   syncTagChipSelection();
   syncModuleChipSelection();
 });
@@ -341,10 +442,28 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     const tags = document.getElementById('routeTags').value.trim();
     const description = document.getElementById('routeDescription').value.trim();
 
-    if (!title || !url) {
-      alert('Título y URL son obligatorios');
-      return;
+    // Validación mejorada
+    let hasErrors = false;
+    
+    if (!title) {
+      document.getElementById('routeTitle').classList.add('form-error');
+      document.getElementById('titleError').classList.add('show');
+      hasErrors = true;
+    } else {
+      document.getElementById('routeTitle').classList.remove('form-error');
+      document.getElementById('titleError').classList.remove('show');
     }
+    
+    if (!url) {
+      document.getElementById('routeUrl').classList.add('form-error');
+      document.getElementById('urlError').classList.add('show');
+      hasErrors = true;
+    } else {
+      document.getElementById('routeUrl').classList.remove('form-error');
+      document.getElementById('urlError').classList.remove('show');
+    }
+    
+    if (hasErrors) return;
 
     // Cargar rutas existentes
     const stored = await chrome.storage.local.get([STORAGE_ROUTES_KEY]);
@@ -377,11 +496,17 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     // Feedback y cerrar
     const btn = document.getElementById('addRouteBtn');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Ruta Añadida!';
-    btn.style.background = 'rgba(16, 185, 129, 0.3)';
+    btn.innerHTML = '<svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>¡Ruta Guardada!';
+    btn.classList.add('action-btn');
+    btn.style.background = 'rgba(16, 185, 129, 0.95)';
+    btn.style.color = 'white';
+    btn.style.borderColor = 'rgba(16, 185, 129, 1)';
 
     document.getElementById('addRouteModal').classList.remove('active');
     document.getElementById('addRouteForm').reset();
+    hideDuplicateAlert();
+    document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
+    document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
     syncTagChipSelection();
     syncModuleChipSelection();
     
@@ -391,10 +516,12 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     setTimeout(() => {
       btn.innerHTML = originalText;
       btn.style.background = '';
-    }, 2000);
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2500);
   } catch (error) {
     console.error('Error adding route:', error);
-    alert('Error al guardar la ruta');
+    alert('Error al guardar la ruta. Por favor, intenta de nuevo.');
   }
 });
 
@@ -502,6 +629,56 @@ if (routeModuleInput) {
     syncModuleChipSelection();
   });
 }
+
+// Editar ruta duplicada existente
+document.getElementById('editDuplicateBtn').addEventListener('click', () => {
+  const duplicateId = document.getElementById('editDuplicateBtn').dataset.duplicateId;
+  if (!duplicateId) return;
+  
+  // Cerrar el modal del popup
+  document.getElementById('addRouteModal').classList.remove('active');
+  
+  // Abrir la página de gestión con el ID de la ruta para editar
+  chrome.runtime.openOptionsPage(() => {
+    // Enviar mensaje para editar la ruta específica
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        type: 'EDIT_ROUTE',
+        routeId: duplicateId
+      });
+    }, 500);
+  });
+  
+  window.close();
+});
+
+// Detectar cambios en título y URL para buscar duplicados en tiempo real
+let duplicateCheckTimeout;
+const checkDuplicatesOnInput = async () => {
+  clearTimeout(duplicateCheckTimeout);
+  duplicateCheckTimeout = setTimeout(async () => {
+    const title = document.getElementById('routeTitle').value.trim();
+    const url = document.getElementById('routeUrl').value.trim();
+    
+    if (!title && !url) {
+      hideDuplicateAlert();
+      return;
+    }
+    
+    const domain = await getCurrentDomain();
+    if (!domain) return;
+    
+    const duplicate = findDuplicateRoute(domain, url, title);
+    if (duplicate) {
+      showDuplicateAlert(duplicate);
+    } else {
+      hideDuplicateAlert();
+    }
+  }, 500);
+};
+
+document.getElementById('routeTitle').addEventListener('input', checkDuplicatesOnInput);
+document.getElementById('routeUrl').addEventListener('input', checkDuplicatesOnInput);
 
 // Cargar datos al abrir el popup
 loadStats();

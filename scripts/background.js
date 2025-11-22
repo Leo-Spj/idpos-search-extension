@@ -53,3 +53,11 @@ async function loadDefaultRoutes() {
   }
 }
 
+// Manejar mensajes de runtime para edición de rutas
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'EDIT_ROUTE' && message.routeId) {
+    // Almacenar el ID de la ruta a editar en storage temporal
+    chrome.storage.local.set({ pendingEditRouteId: message.routeId });
+  }
+});
+

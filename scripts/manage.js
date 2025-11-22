@@ -185,7 +185,7 @@ function exportRoutesToCsv(routes, scopeLabel = 'todos') {
 }
 
 // Init
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadRoutes();
   setupEventListeners();
   
@@ -196,6 +196,23 @@ document.addEventListener('DOMContentLoaded', () => {
       render();
     }
   });
+  
+  // Verificar si hay una ruta pendiente de edición desde el popup
+  const pendingEditData = await chrome.storage.local.get('pendingEditRouteId');
+  if (pendingEditData.pendingEditRouteId) {
+    // Esperar a que las rutas se carguen
+    setTimeout(() => {
+      const routeToEdit = allRoutes.find(r => r.id === pendingEditData.pendingEditRouteId);
+      if (routeToEdit) {
+        // Cambiar a vista de lista
+        switchView('list');
+        // Abrir el modal de edición con la ruta
+        editRoute(routeToEdit);
+      }
+      // Limpiar el storage
+      chrome.storage.local.remove('pendingEditRouteId');
+    }, 300);
+  }
 });
 
 // Load Data
