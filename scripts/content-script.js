@@ -47,7 +47,8 @@
     rankingEngine: null,
     staticVersion: 0,
     pendingUsageUpdates: new Map(),
-    usageFlushTimer: null
+    usageFlushTimer: null,
+    routeShortcuts: new Map() // Map<serializedShortcut, route>
   };
 
   let rankResults = () => [];
@@ -278,6 +279,21 @@
         color: #c4b5fd;
         border: 1px solid rgba(124, 58, 237, 0.4);
       }
+      .shortcut-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        background: rgba(99, 102, 241, 0.2);
+        color: #a5b4fc;
+        border: 1px solid rgba(99, 102, 241, 0.4);
+        border-radius: 4px;
+        margin-left: auto;
+        flex-shrink: 0;
+        letter-spacing: 0.5px;
+      }
       .result-title {
         font-size: 15px;
         font-weight: 600;
@@ -492,9 +508,17 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (!changes[STORAGE_SHORTCUT_KEY]) return;
-    const next = changes[STORAGE_SHORTCUT_KEY].newValue;
-    state.shortcut = normalizeShortcut(next || DEFAULT_SHORTCUT);
+    
+    // Actualizar atajo global
+    if (changes[STORAGE_SHORTCUT_KEY]) {
+      const next = changes[STORAGE_SHORTCUT_KEY].newValue;
+      state.shortcut = normalizeShortcut(next || DEFAULT_SHORTCUT);
+    }
+    
+    // Actualizar atajos de rutas cuando las rutas cambien
+    if (changes[STORAGE_ROUTES_KEY]) {
+      loadRouteShortcuts();
+    }
   });
 
   window.addEventListener("beforeunload", () => {
@@ -515,6 +539,7 @@
     await Promise.all([
       ensureRankingEngine(),
       loadShortcutPreference(),
+      loadRouteShortcuts(),
       loadStaticNavigation(),
       loadUsageCounts()
     ]);
@@ -909,6 +934,22 @@
       }
 
       header.appendChild(titleWrapper);
+
+      // Agregar indicador de atajo de teclado si existe
+      if (item.id && state.routeShortcuts.size > 0) {
+        // Buscar si esta ruta tiene un atajo asignado
+        for (const [shortcutKey, route] of state.routeShortcuts) {
+          if (route.id === item.id) {
+            const shortcutBadge = document.createElement("span");
+            shortcutBadge.className = "shortcut-badge";
+            shortcutBadge.textContent = formatShortcutBadge(shortcutKey);
+            shortcutBadge.title = "Atajo de teclado asignado";
+            header.appendChild(shortcutBadge);
+            break;
+          }
+        }
+      }
+
       li.appendChild(header);
 
       if (item.description) {
@@ -1456,16 +1497,55 @@
 
   function handleGlobalShortcut(event) {
     if (event.defaultPrevented) return;
-    if (!state.shortcut) return;
+    
+    // Manejar Escape cuando el overlay está abierto
     if (state.open && event.key === "Escape") {
       event.preventDefault();
       closeOverlay();
       return;
     }
-    if (!matchesShortcut(event, state.shortcut)) return;
+    
+    // Ignorar si estamos en un campo editable
     if (shouldIgnoreKeyTarget(event.target)) return;
+    
+    // Primero verificar atajos de rutas (solo si el overlay está cerrado)
+    if (!state.open && state.routeShortcuts.size > 0) {
+      const shortcutKey = eventToShortcutKey(event);
+      const route = state.routeShortcuts.get(shortcutKey);
+      
+      if (route && route.url) {
+        event.preventDefault();
+        navigateToRouteUrl(route);
+        return;
+      }
+    }
+    
+    // Luego verificar atajo global del overlay
+    if (!state.shortcut) return;
+    if (!matchesShortcut(event, state.shortcut)) return;
+    
     event.preventDefault();
     toggleOverlay();
+  }
+
+  // Navegar a una ruta directamente
+  function navigateToRouteUrl(route) {
+    if (!route || !route.url) return;
+    
+    let targetUrl = route.url;
+    
+    // Si la URL no es absoluta, construirla
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      targetUrl = `${protocol}//${host}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
+    }
+    
+    // Incrementar uso
+    incrementUsage(route.id || route.url);
+    
+    // Navegar
+    window.location.href = targetUrl;
   }
 
   function matchesShortcut(event, shortcut) {
@@ -1493,6 +1573,122 @@
       console.warn("IDPOS Navigator: shortcut preference unavailable", error);
       state.shortcut = normalizeShortcut(DEFAULT_SHORTCUT);
     }
+  }
+
+  // Cargar atajos de rutas para el dominio actual
+  async function loadRouteShortcuts() {
+    try {
+      const store = await chrome.storage.local.get(STORAGE_ROUTES_KEY).catch(err => {
+        if (err.message && err.message.includes('Extension context invalidated')) return {};
+        throw err;
+      });
+      
+      const routes = store[STORAGE_ROUTES_KEY] || [];
+      state.routeShortcuts.clear();
+      
+      // Normalizar dominio actual
+      const normalizedCurrentDomain = currentDomain.toLowerCase().replace(/^www\./, '');
+      
+      // Filtrar rutas del dominio actual que tengan atajo
+      routes.forEach(route => {
+        if (!route.shortcut) return;
+        
+        // Normalizar dominio de la ruta
+        const routeDomain = (route.domain || '').toLowerCase().replace(/^www\./, '');
+        if (routeDomain !== normalizedCurrentDomain) return;
+        
+        // Crear clave del atajo
+        const shortcutKey = serializeShortcutKey(route.shortcut);
+        if (shortcutKey) {
+          state.routeShortcuts.set(shortcutKey, route);
+        }
+      });
+      
+      if (state.routeShortcuts.size > 0) {
+        console.log(`IDPOS Navigator: ${state.routeShortcuts.size} route shortcut(s) loaded for ${normalizedCurrentDomain}`);
+      }
+    } catch (error) {
+      console.warn("IDPOS Navigator: route shortcuts unavailable", error);
+    }
+  }
+
+  // Serializa un shortcut a una clave única para el map
+  function serializeShortcutKey(shortcut) {
+    if (!shortcut) return null;
+    
+    // Soportar tanto string como objeto
+    let obj = shortcut;
+    if (typeof shortcut === 'string') {
+      obj = parseShortcutString(shortcut);
+    }
+    
+    if (!obj || !obj.key) return null;
+    
+    const parts = [];
+    if (obj.ctrl) parts.push('ctrl');
+    if (obj.alt) parts.push('alt');
+    if (obj.shift) parts.push('shift');
+    if (obj.meta) parts.push('meta');
+    parts.push(obj.key.toLowerCase());
+    
+    return parts.join('+');
+  }
+
+  // Parsear string de atajo a objeto
+  function parseShortcutString(shortcutStr) {
+    if (!shortcutStr || typeof shortcutStr !== 'string') return null;
+    
+    const parts = shortcutStr.toLowerCase().split('+');
+    const key = parts.pop();
+    
+    return {
+      ctrl: parts.includes('ctrl'),
+      alt: parts.includes('alt'),
+      shift: parts.includes('shift'),
+      meta: parts.includes('meta'),
+      key: key
+    };
+  }
+
+  // Crear clave de atajo desde evento
+  function eventToShortcutKey(event) {
+    const parts = [];
+    if (event.ctrlKey) parts.push('ctrl');
+    if (event.altKey) parts.push('alt');
+    if (event.shiftKey) parts.push('shift');
+    if (event.metaKey) parts.push('meta');
+    parts.push(normalizeKey(event.key));
+    return parts.join('+');
+  }
+
+  // Formatear atajo para mostrar en badge
+  function formatShortcutBadge(shortcutKey) {
+    if (!shortcutKey) return '';
+    
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const parts = shortcutKey.split('+');
+    
+    const symbols = [];
+    parts.forEach(part => {
+      switch (part.toLowerCase()) {
+        case 'ctrl':
+          symbols.push(isMac ? '⌃' : 'Ctrl');
+          break;
+        case 'alt':
+          symbols.push(isMac ? '⌥' : 'Alt');
+          break;
+        case 'shift':
+          symbols.push(isMac ? '⇧' : 'Shift');
+          break;
+        case 'meta':
+          symbols.push(isMac ? '⌘' : 'Win');
+          break;
+        default:
+          symbols.push(part.toUpperCase());
+      }
+    });
+    
+    return symbols.join(isMac ? '' : '+');
   }
 
   function normalizeShortcut(data) {

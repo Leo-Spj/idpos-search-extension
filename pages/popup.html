@@ -377,6 +377,139 @@
       border-color: rgba(255, 255, 255, 0.5);
     }
 
+    /* Estilos para el componente de atajo de teclado */
+    .shortcut-recorder-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .shortcut-recorder-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .shortcut-record-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .shortcut-record-btn:hover {
+      background: rgba(99, 102, 241, 0.35);
+      border-color: rgba(99, 102, 241, 0.6);
+    }
+
+    .shortcut-record-btn.recording {
+      background: rgba(245, 158, 11, 0.3);
+      border-color: rgba(245, 158, 11, 0.6);
+      animation: pulse 1s infinite;
+    }
+
+    .shortcut-record-btn .icon {
+      font-size: 16px;
+    }
+
+    .shortcut-display-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 8px 12px;
+      min-height: 40px;
+    }
+
+    .shortcut-display-wrapper.has-shortcut {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    .shortcut-display {
+      flex: 1;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.7);
+      letter-spacing: 0.5px;
+    }
+
+    .shortcut-display-wrapper.has-shortcut .shortcut-display {
+      color: #86efac;
+    }
+
+    .shortcut-display.recording {
+      color: rgba(245, 158, 11, 1);
+      animation: pulse 1s infinite;
+    }
+
+    .shortcut-display.error {
+      color: #fca5a5;
+      font-size: 12px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .shortcut-clear-btn {
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .shortcut-clear-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+      border-color: rgba(239, 68, 68, 0.6);
+    }
+
+    .shortcut-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .shortcut-suggestion {
+      background: rgba(99, 102, 241, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .shortcut-suggestion:hover {
+      background: rgba(99, 102, 241, 0.4);
+      border-color: rgba(99, 102, 241, 0.8);
+    }
+
     .modal-actions {
       display: flex;
       gap: 10px;
@@ -660,6 +793,24 @@
           <input type="text" id="routeTags" placeholder="Ej: importante, favorito">
           <small>Separados por comas o selecciona sugerencias</small>
           <div class="chip-grid" id="tagSuggestions"></div>
+        </div>
+
+        <div class="form-group">
+          <label>⚡ Atajo Rápido</label>
+          <div class="shortcut-recorder-wrapper">
+            <div class="shortcut-recorder-row">
+              <button type="button" class="shortcut-record-btn" id="routeShortcut">
+                <span class="icon">⌨️</span>
+                <span>Grabar atajo</span>
+              </button>
+            </div>
+            <div class="shortcut-display-wrapper" id="shortcutDisplayWrapper">
+              <span class="shortcut-display" id="shortcutDisplay">Sin atajo asignado</span>
+              <button type="button" class="shortcut-clear-btn" id="clearShortcutBtn" title="Quitar atajo">✕</button>
+            </div>
+          </div>
+          <small>Navega directamente a esta ruta con un atajo de teclado (Ej: Alt+1)</small>
+          <div class="shortcut-suggestions" id="shortcutSuggestions"></div>
         </div>
 
         <div class="form-group">

@@ -1,9 +1,344 @@
 // Constantes
 const STORAGE_ROUTES_KEY = "navigatorRoutes";
 const STORAGE_METADATA_KEY = "navigatorMetadata"; // Nuevo: tracking de uso
-const CSV_HEADERS = ['domain', 'id', 'module', 'title', 'url', 'tags', 'description', 'status'];
+const CSV_HEADERS = ['domain', 'id', 'module', 'title', 'url', 'tags', 'description', 'status', 'shortcut'];
 let cachedRoutes = [];
 let cachedMetadata = null; // Caché para metadata de uso
+let currentShortcutRecorder = null; // Instancia del grabador de atajos
+
+// ============================================
+// FUNCIONES DE ATAJO DE TECLADO
+// ============================================
+
+// Serializar shortcut a string para almacenamiento/comparación
+function serializeShortcut(shortcut) {
+  if (!shortcut || !shortcut.key) return '';
+  const parts = [];
+  if (shortcut.ctrl) parts.push('ctrl');
+  if (shortcut.alt) parts.push('alt');
+  if (shortcut.shift) parts.push('shift');
+  if (shortcut.meta) parts.push('meta');
+  parts.push(shortcut.key.toLowerCase());
+  return parts.join('+');
+}
+
+// Deserializar string a objeto shortcut
+function deserializeShortcut(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.toLowerCase().split('+');
+  if (parts.length === 0) return null;
+  
+  return {
+    ctrl: parts.includes('ctrl'),
+    alt: parts.includes('alt'),
+    shift: parts.includes('shift'),
+    meta: parts.includes('meta'),
+    key: parts[parts.length - 1]
+  };
+}
+
+// Formatear shortcut para mostrar al usuario
+function formatShortcutDisplay(shortcut) {
+  if (!shortcut || !shortcut.key) return '';
+  
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const parts = [];
+  
+  if (shortcut.ctrl) parts.push(isMac ? '⌃' : 'Ctrl');
+  if (shortcut.alt) parts.push(isMac ? '⌥' : 'Alt');
+  if (shortcut.shift) parts.push(isMac ? '⇧' : 'Shift');
+  if (shortcut.meta) parts.push(isMac ? '⌘' : 'Win');
+  
+  let keyDisplay = shortcut.key.toUpperCase();
+  parts.push(keyDisplay);
+  
+  return parts.join(isMac ? '' : ' + ');
+}
+
+// Teclas reservadas
+const RESERVED_SHORTCUTS = new Set([
+  'ctrl+t', 'ctrl+w', 'ctrl+n', 'ctrl+shift+n', 'ctrl+tab', 'ctrl+shift+tab',
+  'ctrl+l', 'ctrl+d', 'ctrl+h', 'ctrl+j', 'ctrl+p', 'ctrl+s', 'ctrl+o',
+  'ctrl+f', 'ctrl+g', 'ctrl+u', 'ctrl+shift+i', 'ctrl+shift+j', 'ctrl+shift+c',
+  'alt+f4', 'alt+tab', 'meta+w', 'meta+t', 'meta+n', 'meta+q', 'meta+tab',
+  'f1', 'f3', 'f5', 'f6', 'f7', 'f11', 'f12'
+]);
+
+function isShortcutReserved(shortcut) {
+  return RESERVED_SHORTCUTS.has(serializeShortcut(shortcut));
+}
+
+// Verificar conflictos de atajo
+function findShortcutConflict(shortcut, currentDomain, excludeRouteId = null) {
+  if (!shortcut || !shortcut.key) return null;
+  
+  const serialized = serializeShortcut(shortcut);
+  const normalizedDomain = normalizeDomain(currentDomain);
+  
+  return cachedRoutes.find(route => {
+    if (excludeRouteId && route.id === excludeRouteId) return false;
+    if (normalizeDomain(route.domain || '') !== normalizedDomain) return false;
+    if (!route.shortcut) return false;
+    
+    const routeShortcut = typeof route.shortcut === 'string' 
+      ? deserializeShortcut(route.shortcut) 
+      : route.shortcut;
+    
+    return serializeShortcut(routeShortcut) === serialized;
+  });
+}
+
+// Sugerir atajos disponibles
+function suggestAvailableShortcuts(domain) {
+  const normalizedDomain = normalizeDomain(domain);
+  const usedShortcuts = new Set();
+  
+  cachedRoutes.forEach(route => {
+    if (normalizeDomain(route.domain || '') === normalizedDomain && route.shortcut) {
+      const shortcut = typeof route.shortcut === 'string' 
+        ? deserializeShortcut(route.shortcut) 
+        : route.shortcut;
+      if (shortcut) {
+        usedShortcuts.add(serializeShortcut(shortcut));
+      }
+    }
+  });
+  
+  const suggestions = [];
+  
+  // Sugerir Alt+1 a Alt+9
+  for (let i = 1; i <= 9; i++) {
+    const shortcut = { ctrl: false, alt: true, shift: false, meta: false, key: i.toString() };
+    if (!usedShortcuts.has(serializeShortcut(shortcut))) {
+      suggestions.push(shortcut);
+    }
+  }
+  
+  return suggestions.slice(0, 5);
+}
+
+// Renderizar sugerencias de atajos
+function renderShortcutSuggestions(domain) {
+  const container = document.getElementById('shortcutSuggestions');
+  if (!container) return;
+  
+  const suggestions = suggestAvailableShortcuts(domain);
+  container.innerHTML = '';
+  
+  if (suggestions.length === 0) {
+    container.innerHTML = '<span style="font-size: 11px; opacity: 0.6;">Todos los atajos Alt+1 a Alt+9 están en uso</span>';
+    return;
+  }
+  
+  suggestions.forEach(shortcut => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'shortcut-suggestion';
+    btn.textContent = formatShortcutDisplay(shortcut);
+    btn.addEventListener('click', () => {
+      if (currentShortcutRecorder) {
+        currentShortcutRecorder.currentShortcut = shortcut;
+        document.getElementById('shortcutDisplay').textContent = formatShortcutDisplay(shortcut);
+      }
+    });
+    container.appendChild(btn);
+  });
+}
+
+// Inicializar grabador de atajos
+function initShortcutRecorder(domain, excludeRouteId = null) {
+  const recordButton = document.getElementById('routeShortcut');
+  const displayElement = document.getElementById('shortcutDisplay');
+  const displayWrapper = document.getElementById('shortcutDisplayWrapper');
+  const clearButton = document.getElementById('clearShortcutBtn');
+  
+  if (!recordButton || !displayElement) return;
+  
+  // Cleanup previo
+  if (currentShortcutRecorder) {
+    currentShortcutRecorder.currentShortcut = null;
+    currentShortcutRecorder.isRecording = false;
+  }
+  
+  currentShortcutRecorder = {
+    currentShortcut: null,
+    isRecording: false,
+    domain: domain,
+    excludeRouteId: excludeRouteId
+  };
+  
+  // Actualizar estado visual inicial
+  updateShortcutDisplay();
+  
+  // Remover listeners previos clonando el botón
+  const newRecordButton = recordButton.cloneNode(true);
+  recordButton.parentNode.replaceChild(newRecordButton, recordButton);
+  
+  const newClearButton = clearButton.cloneNode(true);
+  clearButton.parentNode.replaceChild(newClearButton, clearButton);
+  
+  // Click en botón de grabar
+  newRecordButton.addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    if (currentShortcutRecorder.isRecording) {
+      // Cancelar grabación
+      stopRecording();
+    } else {
+      // Iniciar grabación
+      startRecording();
+    }
+  });
+  
+  // Click en botón de limpiar
+  newClearButton.addEventListener('click', function(e) {
+    e.preventDefault();
+    currentShortcutRecorder.currentShortcut = null;
+    updateShortcutDisplay();
+  });
+  
+  // Renderizar sugerencias
+  renderShortcutSuggestions(domain);
+}
+
+function startRecording() {
+  if (!currentShortcutRecorder) return;
+  
+  currentShortcutRecorder.isRecording = true;
+  
+  const recordButton = document.getElementById('routeShortcut');
+  const displayElement = document.getElementById('shortcutDisplay');
+  
+  if (recordButton) {
+    recordButton.classList.add('recording');
+    recordButton.innerHTML = '<span class="icon">⏹️</span><span>Cancelar</span>';
+  }
+  
+  if (displayElement) {
+    displayElement.textContent = '⌨️ Presiona tu combinación de teclas...';
+    displayElement.classList.add('recording');
+  }
+  
+  // Listener global para capturar teclas
+  document.addEventListener('keydown', handleShortcutKeydown);
+}
+
+function stopRecording() {
+  if (!currentShortcutRecorder) return;
+  
+  currentShortcutRecorder.isRecording = false;
+  
+  const recordButton = document.getElementById('routeShortcut');
+  const displayElement = document.getElementById('shortcutDisplay');
+  
+  if (recordButton) {
+    recordButton.classList.remove('recording');
+    recordButton.innerHTML = '<span class="icon">⌨️</span><span>Grabar atajo</span>';
+  }
+  
+  if (displayElement) {
+    displayElement.classList.remove('recording');
+  }
+  
+  // Remover listener global
+  document.removeEventListener('keydown', handleShortcutKeydown);
+  
+  updateShortcutDisplay();
+}
+
+function handleShortcutKeydown(event) {
+  if (!currentShortcutRecorder || !currentShortcutRecorder.isRecording) return;
+  
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const modifierKeys = ['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Tab'];
+  if (modifierKeys.includes(event.key)) return;
+  
+  if (event.key === 'Escape') {
+    stopRecording();
+    return;
+  }
+  
+  const shortcut = {
+    ctrl: event.ctrlKey,
+    alt: event.altKey,
+    shift: event.shiftKey,
+    meta: event.metaKey,
+    key: event.key.length === 1 ? event.key.toLowerCase() : event.key
+  };
+  
+  // Validaciones
+  if (!shortcut.ctrl && !shortcut.alt && !shortcut.shift && !shortcut.meta) {
+    showShortcutError('Debe incluir un modificador (Ctrl, Alt, Shift)');
+    return;
+  }
+  
+  if (isShortcutReserved(shortcut)) {
+    showShortcutError('Atajo reservado por el navegador');
+    return;
+  }
+  
+  const conflict = findShortcutConflict(shortcut, currentShortcutRecorder.domain, currentShortcutRecorder.excludeRouteId);
+  if (conflict) {
+    showShortcutError(`Ya usado por: ${conflict.title}`);
+    return;
+  }
+  
+  // Atajo válido
+  currentShortcutRecorder.currentShortcut = shortcut;
+  stopRecording();
+}
+
+function updateShortcutDisplay() {
+  const displayElement = document.getElementById('shortcutDisplay');
+  const displayWrapper = document.getElementById('shortcutDisplayWrapper');
+  
+  if (!displayElement) return;
+  
+  if (currentShortcutRecorder && currentShortcutRecorder.currentShortcut) {
+    displayElement.textContent = formatShortcutDisplay(currentShortcutRecorder.currentShortcut);
+    if (displayWrapper) displayWrapper.classList.add('has-shortcut');
+  } else {
+    displayElement.textContent = 'Sin atajo asignado';
+    if (displayWrapper) displayWrapper.classList.remove('has-shortcut');
+  }
+}
+
+function showShortcutError(message) {
+  const displayElement = document.getElementById('shortcutDisplay');
+  if (!displayElement) return;
+  
+  displayElement.textContent = `❌ ${message}`;
+  displayElement.classList.add('error');
+  
+  setTimeout(() => {
+    displayElement.classList.remove('error');
+    updateShortcutDisplay();
+  }, 2000);
+}
+
+function setShortcutValue(shortcut) {
+  if (!currentShortcutRecorder) {
+    currentShortcutRecorder = { currentShortcut: null, isRecording: false };
+  }
+  
+  if (typeof shortcut === 'string' && shortcut) {
+    shortcut = deserializeShortcut(shortcut);
+  }
+  
+  currentShortcutRecorder.currentShortcut = shortcut || null;
+  updateShortcutDisplay();
+}
+
+function getShortcutValue() {
+  if (!currentShortcutRecorder || !currentShortcutRecorder.currentShortcut) return null;
+  return serializeShortcut(currentShortcutRecorder.currentShortcut);
+}
+
+// ============================================
+// FIN FUNCIONES DE ATAJO
+// ============================================
 
 function escapeCsvValue(value) {
   const stringValue = `${value ?? ''}`;
@@ -169,6 +504,9 @@ function editExistingRoute(routeId) {
   document.getElementById('routeTags').value = parseTagsField(route.tags).join(', ');
   document.getElementById('routeDescription').value = route.description || '';
   
+  // Cargar atajo de teclado existente
+  setShortcutValue(route.shortcut || null);
+  
   // Actualizar sugerencias
   hydrateDomainPresets(route.domain);
   syncTagChipSelection();
@@ -197,6 +535,15 @@ function exitEditMode() {
   
   // Resetear el formulario completamente
   document.getElementById('addRouteForm').reset();
+  
+  // Limpiar el campo de atajo de teclado
+  if (currentShortcutRecorder) {
+    currentShortcutRecorder.currentShortcut = null;
+  }
+  const shortcutDisplay = document.getElementById('shortcutDisplay');
+  if (shortcutDisplay) {
+    shortcutDisplay.textContent = 'Sin atajo';
+  }
 }
 
 // Función para obtener el dominio actual
@@ -829,6 +1176,12 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
     document.getElementById('routeTags').value = parseTagsField(existingRoute.tags).join(', ');
     document.getElementById('routeDescription').value = existingRoute.description || '';
     
+    // Inicializar grabador de atajos
+    initShortcutRecorder(domain, existingRoute.id);
+    
+    // Cargar atajo de teclado existente
+    setShortcutValue(existingRoute.shortcut || null);
+    
     // Marcar que estamos editando
     const saveBtn = document.getElementById('saveRouteBtn');
     saveBtn.textContent = '💾 Guardar Cambios';
@@ -847,6 +1200,9 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
     const saveBtn = document.getElementById('saveRouteBtn');
     saveBtn.textContent = 'Guardar Ruta';
     delete saveBtn.dataset.editingId;
+    
+    // Inicializar grabador de atajos
+    initShortcutRecorder(domain, null);
     
     // Cargar sugerencias
     await hydrateDomainPresets(domain);
@@ -945,7 +1301,8 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
           url: url,
           module: module,
           tags: tagsString,
-          description: description
+          description: description,
+          shortcut: getShortcutValue()
         };
       }
     } else {
@@ -971,7 +1328,8 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
         url: url,
         tags: tagsString,
         description: description,
-        status: 'active'
+        status: 'active',
+        shortcut: getShortcutValue()
       };
 
       routes.push(newRoute);
@@ -1217,6 +1575,22 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+// Event listeners para el campo de atajo de teclado
+const shortcutRecordBtn = document.getElementById('routeShortcutRecord');
+const shortcutClearBtn = document.getElementById('routeShortcutClear');
+
+if (shortcutRecordBtn) {
+  shortcutRecordBtn.addEventListener('click', () => {
+    startShortcutCapture();
+  });
+}
+
+if (shortcutClearBtn) {
+  shortcutClearBtn.addEventListener('click', () => {
+    clearShortcut();
+  });
+}
 
 // Cargar datos al abrir el popup
 loadStats();
