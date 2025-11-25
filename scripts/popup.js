@@ -112,11 +112,18 @@ function showDuplicateAlert(duplicateRoute) {
         <div><strong>Módulo:</strong> ${duplicateRoute.module || 'General'}</div>
         <div><strong>Tags:</strong> ${tags}</div>
       </div>
+      <div style="margin-top: 12px; text-align: center;">
+        <button type="button" class="modal-btn edit" id="quickEditBtn" style="flex: none; padding: 8px 16px; font-size: 12px;" data-route-id="${duplicateRoute.id}">
+          ✏️ Editar Esta Ruta
+        </button>
+      </div>
     </div>
   `;
   
   alertContainer.style.display = 'block';
-  document.getElementById('editDuplicateBtn').style.display = 'block';
+  // No mostrar el botón de editar en panel para edición rápida
+  const editBtn = document.getElementById('editDuplicateBtn');
+  if (editBtn) editBtn.style.display = 'none';
   document.getElementById('saveRouteBtn').textContent = 'Crear de Todos Modos';
   
   // Guardar ID de la ruta duplicada para edición
@@ -141,6 +148,53 @@ function hideDuplicateAlert() {
   if (saveBtn) {
     saveBtn.textContent = 'Guardar Ruta';
   }
+}
+
+// Función para editar una ruta existente directamente desde el popup
+function editExistingRoute(routeId) {
+  const route = cachedRoutes.find(r => r.id === routeId);
+  if (!route) return;
+  
+  // Cambiar a modo edición
+  document.getElementById('modalTitle').textContent = '✏️ Editar Ruta';
+  document.getElementById('editModeIndicator').classList.add('show');
+  document.getElementById('duplicateAlert').style.display = 'none';
+  
+  // Llenar el formulario con los datos existentes
+  document.getElementById('routeTitle').value = route.title || '';
+  document.getElementById('routeUrl').value = route.url || '';
+  document.getElementById('routeModule').value = route.module || 'General';
+  document.getElementById('routeTags').value = parseTagsField(route.tags).join(', ');
+  document.getElementById('routeDescription').value = route.description || '';
+  
+  // Actualizar sugerencias
+  hydrateDomainPresets(route.domain);
+  syncTagChipSelection();
+  syncModuleChipSelection();
+  
+  // Cambiar el botón de guardar
+  const saveBtn = document.getElementById('saveRouteBtn');
+  saveBtn.textContent = '💾 Guardar Cambios';
+  saveBtn.dataset.editingId = routeId;
+  
+  // Ocultar botones de duplicado
+  document.getElementById('editDuplicateBtn').style.display = 'none';
+  
+  // Enfocar el título
+  document.getElementById('routeTitle').focus();
+}
+
+// Función para salir del modo edición
+function exitEditMode() {
+  document.getElementById('modalTitle').textContent = '➕ Añadir Ruta Nueva';
+  document.getElementById('editModeIndicator').classList.remove('show');
+  
+  const saveBtn = document.getElementById('saveRouteBtn');
+  saveBtn.textContent = 'Guardar Ruta';
+  delete saveBtn.dataset.editingId;
+  
+  // Resetear el formulario completamente
+  document.getElementById('addRouteForm').reset();
 }
 
 // Función para obtener el dominio actual
@@ -418,13 +472,14 @@ document.getElementById('cancelAddRoute').addEventListener('click', () => {
   document.getElementById('addRouteModal').classList.remove('active');
   document.getElementById('addRouteForm').reset();
   hideDuplicateAlert();
+  exitEditMode();
   document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
   document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
   syncTagChipSelection();
   syncModuleChipSelection();
 });
 
-// Guardar nueva ruta
+// Guardar nueva ruta o actualizar existente
 document.getElementById('addRouteForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -467,36 +522,63 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
 
     // Cargar rutas existentes
     const stored = await chrome.storage.local.get([STORAGE_ROUTES_KEY]);
-    const routes = stored[STORAGE_ROUTES_KEY] || [];
+    let routes = stored[STORAGE_ROUTES_KEY] || [];
 
-    // Generar ID único
-    const maxId = routes.reduce((max, r) => {
-      const num = parseInt(r.id);
-      return isNaN(num) ? max : Math.max(max, num);
-    }, 0);
-    const newId = (maxId + 1).toString();
+    // Verificar si estamos editando o creando
+    const saveBtn = document.getElementById('saveRouteBtn');
+    const isEditing = saveBtn.dataset.editingId;
+    
+    if (isEditing) {
+      // Modo edición: actualizar ruta existente
+      const routeIndex = routes.findIndex(r => r.id === isEditing);
+      if (routeIndex !== -1) {
+        routes[routeIndex] = {
+          ...routes[routeIndex],
+          title: title,
+          url: url,
+          module: module,
+          tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
+          description: description
+        };
+      }
+    } else {
+      // Modo creación: verificar duplicados antes de crear
+      const duplicate = findDuplicateRoute(domain, url, title);
+      if (duplicate && !confirm('Ya existe una ruta similar. ¿Deseas crear una nueva de todos modos?')) {
+        return;
+      }
 
-    // Crear nueva ruta
-    const newRoute = {
-      domain: domain,
-      id: newId,
-      module: module,
-      title: title,
-      url: url,
-      tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
-      description: description,
-      status: 'active'
-    };
+      // Generar ID único
+      const maxId = routes.reduce((max, r) => {
+        const num = parseInt(r.id);
+        return isNaN(num) ? max : Math.max(max, num);
+      }, 0);
+      const newId = (maxId + 1).toString();
 
-    // Añadir y guardar
-    routes.push(newRoute);
+      // Crear nueva ruta
+      const newRoute = {
+        domain: domain,
+        id: newId,
+        module: module,
+        title: title,
+        url: url,
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
+        description: description,
+        status: 'active'
+      };
+
+      routes.push(newRoute);
+    }
+
+    // Guardar rutas
     await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes });
     cachedRoutes = routes;
 
     // Feedback y cerrar
     const btn = document.getElementById('addRouteBtn');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>¡Ruta Guardada!';
+    const successMessage = isEditing ? '✏️ Ruta Actualizada!' : '➕ Ruta Guardada!';
+    btn.innerHTML = `<svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>${successMessage}`;
     btn.classList.add('action-btn');
     btn.style.background = 'rgba(16, 185, 129, 0.95)';
     btn.style.color = 'white';
@@ -505,6 +587,7 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     document.getElementById('addRouteModal').classList.remove('active');
     document.getElementById('addRouteForm').reset();
     hideDuplicateAlert();
+    exitEditMode();
     document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
     document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
     syncTagChipSelection();
@@ -520,7 +603,7 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
       btn.style.borderColor = '';
     }, 2500);
   } catch (error) {
-    console.error('Error adding route:', error);
+    console.error('Error saving route:', error);
     alert('Error al guardar la ruta. Por favor, intenta de nuevo.');
   }
 });
@@ -679,6 +762,16 @@ const checkDuplicatesOnInput = async () => {
 
 document.getElementById('routeTitle').addEventListener('input', checkDuplicatesOnInput);
 document.getElementById('routeUrl').addEventListener('input', checkDuplicatesOnInput);
+
+// Event listener para el botón de edición rápida
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'quickEditBtn' || e.target.closest('#quickEditBtn')) {
+    const routeId = e.target.dataset.routeId || e.target.closest('#quickEditBtn')?.dataset.routeId;
+    if (routeId) {
+      editExistingRoute(routeId);
+    }
+  }
+});
 
 // Cargar datos al abrir el popup
 loadStats();

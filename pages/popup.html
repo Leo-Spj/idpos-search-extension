@@ -383,6 +383,29 @@
       margin-right: 6px;
     }
 
+    .edit-mode-indicator {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid rgba(34, 197, 94, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .edit-mode-indicator.show {
+      display: block;
+    }
+
+    .edit-mode-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #22c55e;
+    }
+
     .form-error {
       border-color: rgba(239, 68, 68, 0.6) !important;
       background: rgba(239, 68, 68, 0.1) !important;
@@ -518,11 +541,20 @@
   <div class="modal-overlay" id="addRouteModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>➕ Añadir Ruta Nueva</h2>
+        <h2 id="modalTitle">➕ Añadir Ruta Nueva</h2>
         <p id="modalDomain">Dominio: -</p>
       </div>
 
       <div id="duplicateAlert" style="display: none;"></div>
+
+      <div id="editModeIndicator" class="edit-mode-indicator">
+        <div class="edit-mode-title">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+          </svg>
+          ✏️ Editando ruta existente
+        </div>
+      </div>
 
       <form id="addRouteForm">
         <div class="form-group">
