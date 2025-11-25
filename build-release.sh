@@ -9,7 +9,7 @@ echo "🚀 Empaquetando Universal Navigator para Chrome Web Store..."
 
 # Directorio de salida
 OUTPUT_DIR="./dist"
-ZIP_NAME="universal-navigator-v0.3.0.zip"
+ZIP_NAME="universal-navigator-v0.5.0.zip"
 
 # Limpiar directorio de salida si existe
 if [ -d "$OUTPUT_DIR" ]; then
