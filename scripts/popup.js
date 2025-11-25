@@ -1,7 +1,9 @@
 // Constantes
 const STORAGE_ROUTES_KEY = "navigatorRoutes";
+const STORAGE_METADATA_KEY = "navigatorMetadata"; // Nuevo: tracking de uso
 const CSV_HEADERS = ['domain', 'id', 'module', 'title', 'url', 'tags', 'description', 'status'];
 let cachedRoutes = [];
+let cachedMetadata = null; // Caché para metadata de uso
 
 function escapeCsvValue(value) {
   const stringValue = `${value ?? ''}`;
@@ -246,12 +248,164 @@ function parseTagsField(tagsValue) {
     return [];
   }
   if (Array.isArray(tagsValue)) {
-    return tagsValue.map(tag => tag.trim()).filter(Boolean);
+    return tagsValue.map(tag => {
+      if (typeof tag === 'string') return tag.trim();
+      if (tag && tag.name) return tag.name.trim();
+      return '';
+    }).filter(Boolean);
   }
   if (typeof tagsValue === 'string') {
     return tagsValue.split('|').map(tag => tag.trim()).filter(Boolean);
   }
   return [];
+}
+
+// Convertir tags de string a array con metadata (para nueva estructura)
+function serializeTagsForStorage(tagsArray) {
+  // Mantener compatibilidad: guardar como pipe-separated string
+  return tagsArray.filter(Boolean).join('|');
+}
+
+// Obtener o inicializar metadata
+async function getMetadata() {
+  if (cachedMetadata) return cachedMetadata;
+  
+  const stored = await chrome.storage.local.get([STORAGE_METADATA_KEY]);
+  cachedMetadata = stored[STORAGE_METADATA_KEY] || {
+    modulesUsage: {}, // { domain: { moduleName: { count: N, lastUsed: timestamp } } }
+    tagsUsage: {},    // { domain: { tagName: { count: N, lastUsed: timestamp, modules: [module1, module2] } } }
+    version: 1
+  };
+  
+  return cachedMetadata;
+}
+
+// Guardar metadata
+async function saveMetadata(metadata) {
+  cachedMetadata = metadata;
+  await chrome.storage.local.set({ [STORAGE_METADATA_KEY]: metadata });
+}
+
+// Incrementar contador de uso de módulo
+async function trackModuleUsage(domain, moduleName) {
+  if (!domain || !moduleName) return;
+  
+  const metadata = await getMetadata();
+  const normalizedDomain = normalizeDomain(domain);
+  
+  if (!metadata.modulesUsage[normalizedDomain]) {
+    metadata.modulesUsage[normalizedDomain] = {};
+  }
+  
+  if (!metadata.modulesUsage[normalizedDomain][moduleName]) {
+    metadata.modulesUsage[normalizedDomain][moduleName] = { count: 0, lastUsed: null };
+  }
+  
+  metadata.modulesUsage[normalizedDomain][moduleName].count++;
+  metadata.modulesUsage[normalizedDomain][moduleName].lastUsed = Date.now();
+  
+  await saveMetadata(metadata);
+}
+
+// Incrementar contador de uso de tags
+async function trackTagsUsage(domain, tags, moduleName = null) {
+  if (!domain || !tags || !tags.length) return;
+  
+  const metadata = await getMetadata();
+  const normalizedDomain = normalizeDomain(domain);
+  
+  if (!metadata.tagsUsage[normalizedDomain]) {
+    metadata.tagsUsage[normalizedDomain] = {};
+  }
+  
+  tags.forEach(tag => {
+    if (!tag) return;
+    
+    if (!metadata.tagsUsage[normalizedDomain][tag]) {
+      metadata.tagsUsage[normalizedDomain][tag] = { 
+        count: 0, 
+        lastUsed: null,
+        modules: new Set()
+      };
+    }
+    
+    const tagData = metadata.tagsUsage[normalizedDomain][tag];
+    tagData.count++;
+    tagData.lastUsed = Date.now();
+    
+    // Asociar tag con módulo
+    if (moduleName) {
+      if (!(tagData.modules instanceof Set)) {
+        tagData.modules = new Set(tagData.modules || []);
+      }
+      tagData.modules.add(moduleName);
+    }
+  });
+  
+  // Convertir Sets a Arrays para almacenamiento
+  Object.keys(metadata.tagsUsage[normalizedDomain]).forEach(tag => {
+    const tagData = metadata.tagsUsage[normalizedDomain][tag];
+    if (tagData.modules instanceof Set) {
+      tagData.modules = Array.from(tagData.modules);
+    }
+  });
+  
+  await saveMetadata(metadata);
+}
+
+// Analizar relaciones módulo→tags desde datos existentes
+function analyzeModuleTagRelations(domain) {
+  const normalized = normalizeDomain(domain);
+  const domainRoutes = cachedRoutes.filter(route => 
+    normalizeDomain(route.domain || '') === normalized
+  );
+  
+  const moduleTagMap = {}; // { moduleName: { tagName: count } }
+  
+  domainRoutes.forEach(route => {
+    const module = route.module || 'General';
+    const tags = parseTagsField(route.tags);
+    
+    if (!moduleTagMap[module]) {
+      moduleTagMap[module] = {};
+    }
+    
+    tags.forEach(tag => {
+      if (!moduleTagMap[module][tag]) {
+        moduleTagMap[module][tag] = 0;
+      }
+      moduleTagMap[module][tag]++;
+    });
+  });
+  
+  return moduleTagMap;
+}
+
+// Obtener tags filtrados por módulo seleccionado
+async function getTagsForModule(domain, moduleName) {
+  const normalized = normalizeDomain(domain);
+  const metadata = await getMetadata();
+  const domainTags = metadata.tagsUsage[normalized] || {};
+  
+  if (!moduleName || moduleName.toLowerCase() === 'general') {
+    // Si no hay módulo específico, devolver todos los tags
+    return Object.keys(domainTags);
+  }
+  
+  // Filtrar tags que están asociados con este módulo
+  const filteredTags = Object.keys(domainTags).filter(tag => {
+    const tagData = domainTags[tag];
+    const modules = Array.isArray(tagData.modules) ? tagData.modules : [];
+    return modules.includes(moduleName);
+  });
+  
+  // Si no hay tags específicos, analizar desde rutas actuales
+  if (filteredTags.length === 0) {
+    const relations = analyzeModuleTagRelations(domain);
+    return Object.keys(relations[moduleName] || {});
+  }
+  
+  return filteredTags;
 }
 
 function getDomainMetadata(domain) {
@@ -266,10 +420,69 @@ function getDomainMetadata(domain) {
   });
 
   const tags = [...domainTags].sort((a, b) => a.localeCompare(b, 'es'));
-  return { modules, tags };
+  
+  // Agregar información de uso si está disponible
+  return { modules, tags, domainRoutes };
 }
 
-function renderModuleSuggestions(modules, selectedModule = '') {
+// Obtener módulos con información de uso
+async function getModulesWithUsage(domain) {
+  const { modules } = getDomainMetadata(domain);
+  const metadata = await getMetadata();
+  const normalized = normalizeDomain(domain);
+  const modulesUsage = metadata.modulesUsage[normalized] || {};
+  
+  return modules.map(module => ({
+    value: module,
+    label: module,
+    count: modulesUsage[module]?.count || 0,
+    lastUsed: modulesUsage[module]?.lastUsed || 0
+  })).sort((a, b) => {
+    // Ordenar por frecuencia primero, luego alfabéticamente
+    if (b.count !== a.count) return b.count - a.count;
+    return a.value.localeCompare(b.value, 'es');
+  });
+}
+
+// Obtener tags con información de uso, opcionalmente filtrados por módulo
+async function getTagsWithUsage(domain, filterByModule = null) {
+  const { tags } = getDomainMetadata(domain);
+  const metadata = await getMetadata();
+  const normalized = normalizeDomain(domain);
+  const tagsUsage = metadata.tagsUsage[normalized] || {};
+  
+  let filteredTags = tags;
+  
+  // Filtrar por módulo si se especifica
+  if (filterByModule && filterByModule.toLowerCase() !== 'general') {
+    filteredTags = tags.filter(tag => {
+      const tagData = tagsUsage[tag];
+      if (!tagData || !tagData.modules) return false;
+      const modules = Array.isArray(tagData.modules) ? tagData.modules : [];
+      return modules.includes(filterByModule);
+    });
+    
+    // Si no hay tags con metadata, usar análisis en tiempo real
+    if (filteredTags.length === 0) {
+      const relations = analyzeModuleTagRelations(domain);
+      filteredTags = Object.keys(relations[filterByModule] || {});
+    }
+  }
+  
+  return filteredTags.map(tag => ({
+    value: tag,
+    label: tag,
+    count: tagsUsage[tag]?.count || 0,
+    lastUsed: tagsUsage[tag]?.lastUsed || 0,
+    modules: tagsUsage[tag]?.modules || []
+  })).sort((a, b) => {
+    // Ordenar por frecuencia primero, luego alfabéticamente
+    if (b.count !== a.count) return b.count - a.count;
+    return a.value.localeCompare(b.value, 'es');
+  });
+}
+
+async function renderModuleSuggestions(modules, selectedModule = '') {
   const container = document.getElementById('moduleSuggestions');
   const datalist = document.getElementById('moduleOptions');
   if (!container || !datalist) {
@@ -279,9 +492,25 @@ function renderModuleSuggestions(modules, selectedModule = '') {
   container.innerHTML = '';
   datalist.innerHTML = '';
 
+  // Agregar opción de búsqueda si hay muchos módulos
+  if (modules.length > 10) {
+    const searchWrapper = document.createElement('div');
+    searchWrapper.className = 'chip-search-wrapper';
+    searchWrapper.innerHTML = `
+      <input type="text" 
+             class="chip-search-input" 
+             placeholder="🔍 Buscar módulo..." 
+             autocomplete="off"
+             id="moduleSearchInput">
+    `;
+    container.appendChild(searchWrapper);
+  }
+
+  // Poblar datalist
   modules.forEach(module => {
+    const opt = typeof module === 'string' ? module : module.value;
     const option = document.createElement('option');
-    option.value = module;
+    option.value = opt;
     datalist.appendChild(option);
   });
 
@@ -293,20 +522,63 @@ function renderModuleSuggestions(modules, selectedModule = '') {
     return;
   }
 
-  modules.forEach(module => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'chip-button';
-    button.dataset.module = module;
-    button.textContent = module;
-    if (module.toLowerCase() === selectedModule.toLowerCase() && selectedModule) {
-      button.classList.add('active');
+  const renderChips = (filteredModules) => {
+    // Limpiar chips existentes (mantener búsqueda)
+    const searchWrapper = container.querySelector('.chip-search-wrapper');
+    container.querySelectorAll('.chip-button').forEach(btn => btn.remove());
+    container.querySelectorAll('.chip-placeholder').forEach(p => p.remove());
+    
+    if (!filteredModules.length) {
+      const placeholder = document.createElement('span');
+      placeholder.className = 'chip-placeholder';
+      placeholder.textContent = 'No se encontraron módulos';
+      container.appendChild(placeholder);
+      return;
     }
-    container.appendChild(button);
-  });
+
+    filteredModules.forEach(module => {
+      const value = typeof module === 'string' ? module : module.value;
+      const count = (typeof module === 'object' && module.count) ? module.count : null;
+      
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip-button';
+      button.dataset.module = value;
+      
+      if (value.toLowerCase() === selectedModule.toLowerCase() && selectedModule) {
+        button.classList.add('active');
+      }
+      
+      button.textContent = value;
+      
+      if (count !== null && count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'chip-count';
+        badge.textContent = count;
+        button.appendChild(badge);
+      }
+      
+      container.appendChild(button);
+    });
+  };
+
+  renderChips(modules);
+
+  // Event listener para búsqueda
+  const searchInput = container.querySelector('#moduleSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filtered = modules.filter(m => {
+        const value = typeof m === 'string' ? m : m.value;
+        return value.toLowerCase().includes(searchTerm);
+      });
+      renderChips(filtered);
+    });
+  }
 }
 
-function renderTagSuggestions(tags) {
+async function renderTagSuggestions(tags, filterByModule = null) {
   const container = document.getElementById('tagSuggestions');
   if (!container) {
     return;
@@ -314,24 +586,93 @@ function renderTagSuggestions(tags) {
 
   container.innerHTML = '';
 
+  // Agregar opción de búsqueda si hay muchos tags
+  if (tags.length > 15) {
+    const searchWrapper = document.createElement('div');
+    searchWrapper.className = 'chip-search-wrapper';
+    searchWrapper.innerHTML = `
+      <input type="text" 
+             class="chip-search-input" 
+             placeholder="🔍 Buscar tag..." 
+             autocomplete="off"
+             id="tagSearchInput">
+    `;
+    container.appendChild(searchWrapper);
+  }
+
+  // Mostrar mensaje si hay filtro activo
+  if (filterByModule && filterByModule.toLowerCase() !== 'general') {
+    const filterInfo = document.createElement('div');
+    filterInfo.className = 'filter-info';
+    filterInfo.innerHTML = `
+      <span>📌 Filtrado por módulo: <strong>${filterByModule}</strong></span>
+      <button type="button" class="clear-filter-btn" id="clearModuleFilter">✕ Ver todos</button>
+    `;
+    container.appendChild(filterInfo);
+  }
+
   if (!tags.length) {
     const placeholder = document.createElement('span');
     placeholder.className = 'chip-placeholder';
-    placeholder.textContent = 'Aún no hay tags asociados a este dominio.';
+    placeholder.textContent = filterByModule 
+      ? `No hay tags asociados al módulo "${filterByModule}".`
+      : 'Aún no hay tags asociados a este dominio.';
     container.appendChild(placeholder);
     return;
   }
 
-  tags.forEach(tag => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'chip-button';
-    button.dataset.tag = tag;
-    button.textContent = tag;
-    container.appendChild(button);
-  });
+  const renderChips = (filteredTags) => {
+    // Limpiar chips existentes (mantener búsqueda y filtro)
+    const searchWrapper = container.querySelector('.chip-search-wrapper');
+    const filterInfo = container.querySelector('.filter-info');
+    container.querySelectorAll('.chip-button').forEach(btn => btn.remove());
+    container.querySelectorAll('.chip-placeholder').forEach(p => p.remove());
+    
+    if (!filteredTags.length) {
+      const placeholder = document.createElement('span');
+      placeholder.className = 'chip-placeholder';
+      placeholder.textContent = 'No se encontraron tags';
+      container.appendChild(placeholder);
+      return;
+    }
 
-  syncTagChipSelection();
+    filteredTags.forEach(tag => {
+      const value = typeof tag === 'string' ? tag : tag.value;
+      const count = (typeof tag === 'object' && tag.count) ? tag.count : null;
+      
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip-button';
+      button.dataset.tag = value;
+      button.textContent = value;
+      
+      if (count !== null && count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'chip-count';
+        badge.textContent = count;
+        button.appendChild(badge);
+      }
+      
+      container.appendChild(button);
+    });
+
+    syncTagChipSelection();
+  };
+
+  renderChips(tags);
+
+  // Event listener para búsqueda
+  const searchInput = container.querySelector('#tagSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filtered = tags.filter(t => {
+        const value = typeof t === 'string' ? t : t.value;
+        return value.toLowerCase().includes(searchTerm);
+      });
+      renderChips(filtered);
+    });
+  }
 }
 
 function getCurrentTagList() {
@@ -376,7 +717,7 @@ function syncModuleChipSelection() {
   });
 }
 
-async function hydrateDomainPresets(domain) {
+async function hydrateDomainPresets(domain, currentModule = null) {
   if (!domain) {
     return;
   }
@@ -387,10 +728,23 @@ async function hydrateDomainPresets(domain) {
   }
 
   const moduleInput = document.getElementById('routeModule');
-  const { modules, tags } = getDomainMetadata(domain);
-  renderModuleSuggestions(modules, moduleInput ? moduleInput.value : '');
-  renderTagSuggestions(tags);
+  const selectedModule = currentModule || (moduleInput ? moduleInput.value : '');
+  
+  // Obtener módulos con información de uso
+  const modulesWithUsage = await getModulesWithUsage(domain);
+  await renderModuleSuggestions(modulesWithUsage, selectedModule);
+  
+  // Obtener tags filtrados por módulo (si hay uno seleccionado)
+  const tagsWithUsage = await getTagsWithUsage(domain, selectedModule);
+  await renderTagSuggestions(tagsWithUsage, selectedModule);
+  
   syncModuleChipSelection();
+}
+
+// Actualizar tags cuando cambia el módulo seleccionado
+async function updateTagsForModule(domain, moduleName) {
+  const tagsWithUsage = await getTagsWithUsage(domain, moduleName);
+  await renderTagSuggestions(tagsWithUsage, moduleName);
 }
 
 // Abrir navegador en la página actual
@@ -437,33 +791,70 @@ document.getElementById('addRouteBtn').addEventListener('click', async () => {
   // Resetear formulario y estado
   document.getElementById('addRouteForm').reset();
   hideDuplicateAlert();
+  exitEditMode(); // Asegurar que salimos del modo edición
   document.querySelectorAll('.form-error').forEach(el => el.classList.remove('form-error'));
   document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
   
   document.getElementById('modalDomain').textContent = `Dominio: ${domain}`;
-  document.getElementById('addRouteModal').classList.add('active');
   
   // Auto-rellenar URL con la página actual (sin query parameters)
+  let currentUrl = '';
+  let currentTitle = '';
+  
   try {
     if (tab && tab.url) {
       const url = new URL(tab.url);
       // Solo pathname, sin search (query parameters)
-      const pathname = url.pathname;
-      document.getElementById('routeUrl').value = pathname;
-      document.getElementById('routeTitle').value = tab.title || '';
-      
-      // Buscar duplicados inmediatamente
-      const duplicate = findDuplicateRoute(domain, pathname, tab.title || '');
-      if (duplicate) {
-        showDuplicateAlert(duplicate);
-      }
+      currentUrl = url.pathname;
+      currentTitle = tab.title || '';
+      document.getElementById('routeUrl').value = currentUrl;
+      document.getElementById('routeTitle').value = currentTitle;
     }
   } catch (error) {
     console.error('Error getting current URL:', error);
   }
   
-  await hydrateDomainPresets(domain);
-  syncTagChipSelection();
+  // Buscar si ya existe una ruta para esta URL
+  const existingRoute = findDuplicateRoute(domain, currentUrl, currentTitle);
+  
+  if (existingRoute) {
+    // MODO EDICIÓN: La ruta ya existe
+    document.getElementById('modalTitle').textContent = '✏️ Editar Ruta Existente';
+    document.getElementById('editModeIndicator').classList.add('show');
+    
+    // Pre-llenar con datos existentes
+    document.getElementById('routeTitle').value = existingRoute.title || '';
+    document.getElementById('routeUrl').value = existingRoute.url || '';
+    document.getElementById('routeModule').value = existingRoute.module || 'General';
+    document.getElementById('routeTags').value = parseTagsField(existingRoute.tags).join(', ');
+    document.getElementById('routeDescription').value = existingRoute.description || '';
+    
+    // Marcar que estamos editando
+    const saveBtn = document.getElementById('saveRouteBtn');
+    saveBtn.textContent = '💾 Guardar Cambios';
+    saveBtn.dataset.editingId = existingRoute.id;
+    
+    // Cargar sugerencias y sincronizar
+    await hydrateDomainPresets(domain);
+    syncTagChipSelection();
+    syncModuleChipSelection();
+    
+  } else {
+    // MODO AÑADIR: Nueva ruta
+    document.getElementById('modalTitle').textContent = '➕ Añadir Ruta Nueva';
+    document.getElementById('editModeIndicator').classList.remove('show');
+    
+    const saveBtn = document.getElementById('saveRouteBtn');
+    saveBtn.textContent = 'Guardar Ruta';
+    delete saveBtn.dataset.editingId;
+    
+    // Cargar sugerencias
+    await hydrateDomainPresets(domain);
+    syncTagChipSelection();
+  }
+  
+  // Mostrar modal
+  document.getElementById('addRouteModal').classList.add('active');
   document.getElementById('routeTitle').focus();
 });
 
@@ -493,9 +884,23 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     // Obtener valores del formulario
     const title = document.getElementById('routeTitle').value.trim();
     const url = document.getElementById('routeUrl').value.trim();
-    const module = document.getElementById('routeModule').value.trim() || 'General';
-    const tags = document.getElementById('routeTags').value.trim();
+    let module = document.getElementById('routeModule').value.trim() || 'General';
+    const tagsInput = document.getElementById('routeTags').value.trim();
     const description = document.getElementById('routeDescription').value.trim();
+
+    // Normalizar módulo a Title Case
+    module = module.split(/\s+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
+    // Normalizar tags
+    const tagsArray = tagsInput 
+      ? tagsInput.split(',').map(t => {
+          return t.trim().split(/\s+/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+        }).filter(t => t)
+      : [];
 
     // Validación mejorada
     let hasErrors = false;
@@ -528,6 +933,8 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     const saveBtn = document.getElementById('saveRouteBtn');
     const isEditing = saveBtn.dataset.editingId;
     
+    const tagsString = serializeTagsForStorage(tagsArray);
+    
     if (isEditing) {
       // Modo edición: actualizar ruta existente
       const routeIndex = routes.findIndex(r => r.id === isEditing);
@@ -537,7 +944,7 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
           title: title,
           url: url,
           module: module,
-          tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
+          tags: tagsString,
           description: description
         };
       }
@@ -562,7 +969,7 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
         module: module,
         title: title,
         url: url,
-        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t).join('|') : '',
+        tags: tagsString,
         description: description,
         status: 'active'
       };
@@ -573,6 +980,10 @@ document.getElementById('addRouteForm').addEventListener('submit', async (e) => 
     // Guardar rutas
     await chrome.storage.local.set({ [STORAGE_ROUTES_KEY]: routes });
     cachedRoutes = routes;
+    
+    // Trackear uso de módulos y tags
+    await trackModuleUsage(domain, module);
+    await trackTagsUsage(domain, tagsArray, module);
 
     // Feedback y cerrar
     const btn = document.getElementById('addRouteBtn');
@@ -708,10 +1119,44 @@ if (routeTagsInput) {
 
 const routeModuleInput = document.getElementById('routeModule');
 if (routeModuleInput) {
-  routeModuleInput.addEventListener('input', () => {
+  let moduleChangeTimeout;
+  routeModuleInput.addEventListener('input', async () => {
     syncModuleChipSelection();
+    
+    // Actualizar tags filtrados por módulo con debounce
+    clearTimeout(moduleChangeTimeout);
+    moduleChangeTimeout = setTimeout(async () => {
+      const domain = await getCurrentDomain();
+      if (domain) {
+        const moduleName = routeModuleInput.value.trim();
+        await updateTagsForModule(domain, moduleName);
+      }
+    }, 300);
+  });
+  
+  // Listener para cuando se pierde el foco (normalizar texto)
+  routeModuleInput.addEventListener('blur', () => {
+    if (routeModuleInput.value.trim()) {
+      // Normalizar a Title Case
+      const normalized = routeModuleInput.value.trim()
+        .split(/\s+/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      routeModuleInput.value = normalized;
+    }
   });
 }
+
+// Event listener para limpiar filtro de módulo en tags
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'clearModuleFilter' || e.target.closest('#clearModuleFilter')) {
+    const domain = await getCurrentDomain();
+    if (domain) {
+      const tagsWithUsage = await getTagsWithUsage(domain, null);
+      await renderTagSuggestions(tagsWithUsage, null);
+    }
+  }
+});
 
 // Editar ruta duplicada existente
 document.getElementById('editDuplicateBtn').addEventListener('click', () => {

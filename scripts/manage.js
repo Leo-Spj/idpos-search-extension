@@ -3,9 +3,12 @@
 let allRoutes = [];
 let currentView = 'dashboard';
 let searchTerm = '';
+let cachedMetadata = null; // Para tracking de uso
 
 const ALL_DOMAINS_VALUE = '__all__';
 const CSV_HEADERS = ['domain', 'id', 'module', 'title', 'url', 'tags', 'description', 'status'];
+const STORAGE_ROUTES_KEY = "navigatorRoutes";
+const STORAGE_METADATA_KEY = "navigatorMetadata";
 
 function createRouteId(prefix = 'route') {
   return `${prefix}:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -119,6 +122,88 @@ function normalizeTags(raw) {
     .map(tag => tag.trim())
     .filter(Boolean)
     .join('|');
+}
+
+// Normalización de texto a Title Case
+function normalizeText(text) {
+  if (typeof text !== "string") return "";
+  return text.trim()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+// Obtener o inicializar metadata
+async function getMetadata() {
+  if (cachedMetadata) return cachedMetadata;
+  
+  const stored = await chrome.storage.local.get([STORAGE_METADATA_KEY]);
+  cachedMetadata = stored[STORAGE_METADATA_KEY] || {
+    modulesUsage: {},
+    tagsUsage: {},
+    version: 1
+  };
+  
+  return cachedMetadata;
+}
+
+// Guardar metadata
+async function saveMetadata(metadata) {
+  cachedMetadata = metadata;
+  await chrome.storage.local.set({ [STORAGE_METADATA_KEY]: metadata });
+}
+
+// Trackear uso al guardar ruta
+async function trackRouteUsage(domain, moduleName, tags) {
+  if (!domain) return;
+  
+  const metadata = await getMetadata();
+  const normalizedDomain = domain.replace(/^www\./, '');
+  
+  // Track módulo
+  if (moduleName) {
+    if (!metadata.modulesUsage[normalizedDomain]) {
+      metadata.modulesUsage[normalizedDomain] = {};
+    }
+    if (!metadata.modulesUsage[normalizedDomain][moduleName]) {
+      metadata.modulesUsage[normalizedDomain][moduleName] = { count: 0, lastUsed: null };
+    }
+    metadata.modulesUsage[normalizedDomain][moduleName].count++;
+    metadata.modulesUsage[normalizedDomain][moduleName].lastUsed = Date.now();
+  }
+  
+  // Track tags
+  if (tags && tags.length) {
+    if (!metadata.tagsUsage[normalizedDomain]) {
+      metadata.tagsUsage[normalizedDomain] = {};
+    }
+    
+    const tagsArray = typeof tags === 'string' 
+      ? tags.split('|').map(t => t.trim()).filter(Boolean)
+      : tags;
+    
+    tagsArray.forEach(tag => {
+      if (!tag) return;
+      
+      if (!metadata.tagsUsage[normalizedDomain][tag]) {
+        metadata.tagsUsage[normalizedDomain][tag] = { 
+          count: 0, 
+          lastUsed: null,
+          modules: []
+        };
+      }
+      
+      const tagData = metadata.tagsUsage[normalizedDomain][tag];
+      tagData.count++;
+      tagData.lastUsed = Date.now();
+      
+      if (moduleName && !tagData.modules.includes(moduleName)) {
+        tagData.modules.push(moduleName);
+      }
+    });
+  }
+  
+  await saveMetadata(metadata);
 }
 
 function getDomainCounts() {
@@ -510,14 +595,20 @@ function setupEventListeners() {
     const id = document.getElementById('routeId').value;
     const domain = document.getElementById('inputDomain').value.trim();
     const title = document.getElementById('inputTitle').value.trim();
-    const module = document.getElementById('inputModule').value.trim() || 'General';
+    let module = document.getElementById('inputModule').value.trim() || 'General';
     const url = document.getElementById('inputUrl').value.trim();
     const status = document.getElementById('inputStatus').value;
     const tagsInput = document.getElementById('inputTags').value.trim();
     const description = document.getElementById('inputDescription').value.trim();
 
-    // Convert commas to pipes for internal storage
-    const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t).join('|') : '';
+    // Normalizar módulo a Title Case
+    module = normalizeText(module);
+
+    // Normalizar y convertir tags (comas a pipes)
+    const tagsArray = tagsInput 
+      ? tagsInput.split(',').map(t => normalizeText(t.trim())).filter(t => t)
+      : [];
+    const tags = tagsArray.join('|');
 
     const newRoute = {
       id: id || `route:${Date.now()}`,
@@ -534,6 +625,10 @@ function setupEventListeners() {
     }
 
     await saveRoutes();
+    
+    // Trackear uso
+    await trackRouteUsage(domain, module, tagsArray);
+    
     closeModal();
   });
 

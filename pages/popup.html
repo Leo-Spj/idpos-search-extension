@@ -282,6 +282,9 @@
       font-size: 12px;
       cursor: pointer;
       transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .chip-button:hover {
@@ -295,9 +298,83 @@
       border-color: rgba(255, 255, 255, 0.95);
     }
 
+    .chip-count {
+      background: rgba(255, 255, 255, 0.25);
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    .chip-button.active .chip-count {
+      background: rgba(118, 75, 162, 0.2);
+      color: #764ba2;
+    }
+
     .chip-placeholder {
       font-size: 11px;
       opacity: 0.7;
+    }
+
+    .chip-search-wrapper {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+
+    .chip-search-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .chip-search-input::placeholder {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .chip-search-input:focus {
+      background: rgba(0, 0, 0, 0.4);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .filter-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .filter-info strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .clear-filter-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .clear-filter-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      border-color: rgba(255, 255, 255, 0.5);
     }
 
     .modal-actions {
